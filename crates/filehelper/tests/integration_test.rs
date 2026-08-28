@@ -9,12 +9,18 @@ async fn test_config_cli() {
     use clap::Parser;
     let config = filehelper::config::Config::parse_from([
         "filehelper",
-        "--addr", "0.0.0.0:9090",
-        "--password", "mypass",
-        "--data-dir", "/tmp/fh-test",
-        "--max-upload-size", "1048576",
-        "--session-ttl", "7d",
-        "--name", "TestApp",
+        "--addr",
+        "0.0.0.0:9090",
+        "--password",
+        "mypass",
+        "--data-dir",
+        "/tmp/fh-test",
+        "--max-upload-size",
+        "1048576",
+        "--session-ttl",
+        "7d",
+        "--name",
+        "TestApp",
     ]);
     assert_eq!(config.addr, "0.0.0.0:9090");
     assert_eq!(config.password, Some("mypass".to_string()));
@@ -35,10 +41,11 @@ async fn test_password_hash_and_verify() {
 #[tokio::test]
 async fn test_db_migration() {
     let (state, tmp) = setup_test_app().await;
-    let rows: Vec<(String,)> = sqlx::query_as("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        .fetch_all(&state.db)
-        .await
-        .unwrap();
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .fetch_all(&state.db)
+            .await
+            .unwrap();
     let names: Vec<&str> = rows.iter().map(|r| r.0.as_str()).collect();
     assert!(names.contains(&"messages"));
     assert!(names.contains(&"attachments"));
@@ -50,11 +57,16 @@ async fn test_db_migration() {
 async fn test_message_insert_and_list() {
     let (state, tmp) = setup_test_app().await;
 
-    let msg = db::insert_message(&state.db, &db::NewMessage {
-        kind: "text".to_string(),
-        text: Some("Hello world".to_string()),
-        attachment: None,
-    }).await.unwrap();
+    let msg = db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "text".to_string(),
+            text: Some("Hello world".to_string()),
+            attachment: None,
+        },
+    )
+    .await
+    .unwrap();
 
     assert_eq!(msg.kind, "text");
     assert_eq!(msg.text.as_deref(), Some("Hello world"));
@@ -73,11 +85,16 @@ async fn test_message_pagination() {
     let (state, tmp) = setup_test_app().await;
 
     for i in 0..5 {
-        db::insert_message(&state.db, &db::NewMessage {
-            kind: "text".to_string(),
-            text: Some(format!("Message {i}")),
-            attachment: None,
-        }).await.unwrap();
+        db::insert_message(
+            &state.db,
+            &db::NewMessage {
+                kind: "text".to_string(),
+                text: Some(format!("Message {i}")),
+                attachment: None,
+            },
+        )
+        .await
+        .unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(2)).await;
     }
 
@@ -97,11 +114,16 @@ async fn test_message_pagination() {
 async fn test_message_delete() {
     let (state, tmp) = setup_test_app().await;
 
-    let msg = db::insert_message(&state.db, &db::NewMessage {
-        kind: "text".to_string(),
-        text: Some("To be deleted".to_string()),
-        attachment: None,
-    }).await.unwrap();
+    let msg = db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "text".to_string(),
+            text: Some("To be deleted".to_string()),
+            attachment: None,
+        },
+    )
+    .await
+    .unwrap();
 
     db::delete_message(&state.db, &msg.id).await.unwrap();
 
@@ -115,24 +137,31 @@ async fn test_message_delete() {
 async fn test_message_attachment_cascade() {
     let (state, tmp) = setup_test_app().await;
 
-    let msg = db::insert_message(&state.db, &db::NewMessage {
-        kind: "document".to_string(),
-        text: None,
-        attachment: Some(db::NewAttachment {
-            original_name: "test.txt".to_string(),
-            mime_type: Some("text/plain".to_string()),
-            size_bytes: 100,
-            sha256: "abc123".to_string(),
-            storage_name: "storage-uuid".to_string(),
-        }),
-    }).await.unwrap();
+    let msg = db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "document".to_string(),
+            text: None,
+            attachment: Some(db::NewAttachment {
+                original_name: "test.txt".to_string(),
+                mime_type: Some("text/plain".to_string()),
+                size_bytes: 100,
+                sha256: "abc123".to_string(),
+                storage_name: "storage-uuid".to_string(),
+            }),
+        },
+    )
+    .await
+    .unwrap();
 
     assert!(msg.attachment.is_some());
 
     // Delete message, attachment should cascade
     db::delete_message(&state.db, &msg.id).await.unwrap();
 
-    let att = filehelper::db::attachments::get_attachment(&state.db, &msg.attachment.unwrap().id).await.unwrap();
+    let att = filehelper::db::attachments::get_attachment(&state.db, &msg.attachment.unwrap().id)
+        .await
+        .unwrap();
     assert!(att.is_none());
 
     cleanup(&tmp);
@@ -142,17 +171,22 @@ async fn test_message_attachment_cascade() {
 async fn test_storage_stats() {
     let (state, tmp) = setup_test_app().await;
 
-    db::insert_message(&state.db, &db::NewMessage {
-        kind: "image".to_string(),
-        text: None,
-        attachment: Some(db::NewAttachment {
-            original_name: "photo.jpg".to_string(),
-            mime_type: Some("image/jpeg".to_string()),
-            size_bytes: 1024,
-            sha256: "hash1".to_string(),
-            storage_name: "s1".to_string(),
-        }),
-    }).await.unwrap();
+    db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "image".to_string(),
+            text: None,
+            attachment: Some(db::NewAttachment {
+                original_name: "photo.jpg".to_string(),
+                mime_type: Some("image/jpeg".to_string()),
+                size_bytes: 1024,
+                sha256: "hash1".to_string(),
+                storage_name: "s1".to_string(),
+            }),
+        },
+    )
+    .await
+    .unwrap();
 
     let stats = db::get_storage_stats(&state.db).await.unwrap();
     assert_eq!(stats["total"], 1024);
@@ -166,16 +200,23 @@ async fn test_storage_stats() {
 async fn test_search() {
     let (state, tmp) = setup_test_app().await;
 
-    db::insert_message(&state.db, &db::NewMessage {
-        kind: "text".to_string(),
-        text: Some("Find this unique text".to_string()),
-        attachment: None,
-    }).await.unwrap();
+    db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "text".to_string(),
+            text: Some("Find this unique text".to_string()),
+            attachment: None,
+        },
+    )
+    .await
+    .unwrap();
 
     // Wait a moment for FTS index
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let results = db::search::search_messages(&state.db, "unique", 10).await.unwrap();
+    let results = db::search::search_messages(&state.db, "unique", 10)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].text.as_deref(), Some("Find this unique text"));
 
