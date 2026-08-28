@@ -1,0 +1,26 @@
+.menu {
+  position: fixed;
+  z-index: 200;
+  background: var(--menu-background);
+  border-radius: 12px;
+  box-shadow: var(--shadow-heavy);
+  padding: 4px;
+  min-width: 160px;
+  animation: scaleIn 0.15s ease-out;
+}
+
+.item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  text-align: left;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--menu-hover);
+  }
+}
