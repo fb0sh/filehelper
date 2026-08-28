@@ -1,8 +1,8 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::http::Request;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -76,8 +76,7 @@ pub fn verify_session(
     let mut mac = HmacSha256::new_from_slice(&state.config.session_key)
         .map_err(|_| AppError::AuthRequired)?;
     mac.update(payload);
-    mac.verify_slice(sig)
-        .map_err(|_| AppError::AuthRequired)?;
+    mac.verify_slice(sig).map_err(|_| AppError::AuthRequired)?;
 
     let expires = u64::from_be_bytes(payload[..8].try_into().unwrap());
     let now = SystemTime::now()

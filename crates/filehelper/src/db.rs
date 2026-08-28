@@ -1,5 +1,5 @@
-pub mod messages;
 pub mod attachments;
+pub mod messages;
 pub mod search;
 
 pub use messages::*;
@@ -10,9 +10,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query("PRAGMA journal_mode=WAL;")
         .execute(pool)
         .await?;
-    sqlx::query("PRAGMA foreign_keys=ON;")
-        .execute(pool)
-        .await?;
+    sqlx::query("PRAGMA foreign_keys=ON;").execute(pool).await?;
     sqlx::query("PRAGMA busy_timeout=5000;")
         .execute(pool)
         .await?;

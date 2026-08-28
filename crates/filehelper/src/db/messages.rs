@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -38,7 +39,7 @@ pub async fn list_messages(
     before: Option<String>,
     limit: i64,
 ) -> Result<MessageListResponse, AppError> {
-    let limit = limit.min(100).max(1);
+    let limit = limit.clamp(1, 100);
     let messages = if let Some(ref cursor) = before {
         sqlx::query_as::<_, MessageRow>(
             r#"
@@ -98,10 +99,7 @@ pub async fn list_messages(
     })
 }
 
-pub async fn insert_message(
-    pool: &SqlitePool,
-    message: &NewMessage,
-) -> Result<Message, AppError> {
+pub async fn insert_message(pool: &SqlitePool, message: &NewMessage) -> Result<Message, AppError> {
     let now_ms = chrono::Utc::now().timestamp_millis();
     let id = uuid::Uuid::now_v7().to_string();
 
@@ -110,15 +108,13 @@ pub async fn insert_message(
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
         .to_string();
 
-    sqlx::query(
-        "INSERT INTO messages (id, kind, text, created_at_ms) VALUES (?1, ?2, ?3, ?4)",
-    )
-    .bind(&id)
-    .bind(&message.kind)
-    .bind(&message.text)
-    .bind(now_ms)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO messages (id, kind, text, created_at_ms) VALUES (?1, ?2, ?3, ?4)")
+        .bind(&id)
+        .bind(&message.kind)
+        .bind(&message.text)
+        .bind(now_ms)
+        .execute(pool)
+        .await?;
 
     if let Some(ref att) = message.attachment {
         let att_id = uuid::Uuid::now_v7().to_string();
@@ -246,15 +242,13 @@ pub fn group_messages(rows: &[MessageRow]) -> std::collections::HashMap<String, 
                 attachment: None,
             }
         });
-        if let (Some(a_id), Some(a_filename), Some(a_size), Some(a_sha256), Some(_a_storage_name)) =
-            (
-                row.a_id.as_ref(),
-                row.a_filename.as_ref(),
-                row.a_size,
-                row.a_sha256.as_ref(),
-                row.a_storage_name.as_ref(),
-            )
-        {
+        if let (Some(a_id), Some(a_filename), Some(a_size), Some(a_sha256), Some(_a_storage_name)) = (
+            row.a_id.as_ref(),
+            row.a_filename.as_ref(),
+            row.a_size,
+            row.a_sha256.as_ref(),
+            row.a_storage_name.as_ref(),
+        ) {
             entry.attachment = Some(Attachment {
                 id: a_id.clone(),
                 filename: a_filename.clone(),
@@ -283,9 +277,7 @@ pub struct NewMessage {
     pub attachment: Option<NewAttachment>,
 }
 
-pub async fn get_storage_stats(
-    pool: &SqlitePool,
-) -> Result<serde_json::Value, AppError> {
+pub async fn get_storage_stats(pool: &SqlitePool) -> Result<serde_json::Value, AppError> {
     let total = sqlx::query_scalar::<_, Option<i64>>(
         "SELECT COALESCE(SUM(size_bytes), 0) FROM attachments",
     )

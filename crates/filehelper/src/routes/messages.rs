@@ -1,8 +1,8 @@
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use serde::Deserialize;
 
 #[derive(Deserialize)]

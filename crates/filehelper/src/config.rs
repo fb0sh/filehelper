@@ -2,7 +2,11 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "filehelper", version = "0.1.0", about = "Self-hosted file transfer assistant")]
+#[command(
+    name = "filehelper",
+    version = "0.1.0",
+    about = "Self-hosted file transfer assistant"
+)]
 pub struct Config {
     /// Listen address
     #[arg(long, default_value = "127.0.0.1:8080")]
@@ -63,23 +67,23 @@ impl Config {
 
 fn parse_duration(s: &str) -> Result<u64, String> {
     let s = s.trim();
-    if s.ends_with('d') {
-        let days: u64 = s[..s.len() - 1]
+    if let Some(stripped) = s.strip_suffix('d') {
+        let days: u64 = stripped
             .parse()
             .map_err(|_| format!("Invalid duration: {s}"))?;
         Ok(days * 86400)
-    } else if s.ends_with('h') {
-        let hours: u64 = s[..s.len() - 1]
+    } else if let Some(stripped) = s.strip_suffix('h') {
+        let hours: u64 = stripped
             .parse()
             .map_err(|_| format!("Invalid duration: {s}"))?;
         Ok(hours * 3600)
-    } else if s.ends_with('m') {
-        let mins: u64 = s[..s.len() - 1]
+    } else if let Some(stripped) = s.strip_suffix('m') {
+        let mins: u64 = stripped
             .parse()
             .map_err(|_| format!("Invalid duration: {s}"))?;
         Ok(mins * 60)
-    } else if s.ends_with('s') {
-        s[..s.len() - 1]
+    } else if let Some(stripped) = s.strip_suffix('s') {
+        stripped
             .parse()
             .map_err(|_| format!("Invalid duration: {s}"))
     } else {

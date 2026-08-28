@@ -32,11 +32,10 @@ pub async fn login(
             .unwrap());
     }
     let db = &state.db;
-    let stored_hash = sqlx::query_scalar::<_, String>(
-        "SELECT value FROM meta WHERE key = 'password_hash'",
-    )
-    .fetch_optional(db)
-    .await?;
+    let stored_hash =
+        sqlx::query_scalar::<_, String>("SELECT value FROM meta WHERE key = 'password_hash'")
+            .fetch_optional(db)
+            .await?;
 
     let Some(hash) = stored_hash else {
         return Err(crate::error::AppError::Internal(anyhow::anyhow!(

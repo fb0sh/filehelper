@@ -12,19 +12,16 @@ pub async fn cleanup_tmp(state: &AppState) {
 
     if let Ok(mut entries) = tokio::fs::read_dir(tmp_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
-            if let Ok(metadata) = entry.metadata().await {
-                if let Ok(modified) = metadata.modified() {
-                    if let Ok(dur) = modified.duration_since(UNIX_EPOCH) {
-                        if dur.as_secs() < cutoff {
+            if let Ok(metadata) = entry.metadata().await
+                && let Ok(modified) = metadata.modified()
+                    && let Ok(dur) = modified.duration_since(UNIX_EPOCH)
+                        && dur.as_secs() < cutoff {
                             let path = entry.path();
                             if path.extension().map(|e| e == "part").unwrap_or(false) {
                                 let _ = tokio::fs::remove_file(&path).await;
                                 tracing::info!("Cleaned up stale tmp file: {}", path.display());
                             }
                         }
-                    }
-                }
-            }
         }
     }
 
@@ -37,12 +34,11 @@ pub async fn cleanup_tmp(state: &AppState) {
 
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if !orphan_names.contains(&name.to_string()) {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && !orphan_names.contains(&name.to_string()) {
                     let _ = tokio::fs::remove_file(&path).await;
                     tracing::info!("Cleaned up orphan trash file: {}", path.display());
                 }
-            }
         }
     }
 }

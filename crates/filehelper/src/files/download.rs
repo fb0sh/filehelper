@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::extract::{Path, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use tokio_util::io::ReaderStream;
 
@@ -55,7 +55,10 @@ async fn serve_file(
     let metadata = file.metadata().await?;
     let file_size = metadata.len();
 
-    let mime = att.mime_type.as_deref().unwrap_or("application/octet-stream");
+    let mime = att
+        .mime_type
+        .as_deref()
+        .unwrap_or("application/octet-stream");
 
     // Handle range requests
     if let Some(range_header) = headers.get("range") {
@@ -66,12 +69,7 @@ async fn serve_file(
             tokio::io::AsyncSeekExt::seek(&mut f, std::io::SeekFrom::Start(range.start)).await?;
             tokio::io::AsyncReadExt::read_exact(&mut f, &mut buf).await?;
 
-            let content_range = format!(
-                "bytes {}-{}/{}",
-                range.start,
-                range.end,
-                file_size
-            );
+            let content_range = format!("bytes {}-{}/{}", range.start, range.end, file_size);
 
             let mut builder = Response::builder()
                 .status(StatusCode::PARTIAL_CONTENT)

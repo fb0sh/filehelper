@@ -1,8 +1,8 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::extract::{
-    ws::{Message, WebSocket},
     State, WebSocketUpgrade,
+    ws::{Message, WebSocket},
 };
 use axum::response::Response;
 use futures_util::{SinkExt, StreamExt};
@@ -17,21 +17,19 @@ pub async fn ws_handler(
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, rx)))
 }
 
-async fn handle_socket(socket: WebSocket, rx: tokio::sync::broadcast::Receiver<crate::state::BroadcastEvent>) {
+async fn handle_socket(
+    socket: WebSocket,
+    rx: tokio::sync::broadcast::Receiver<crate::state::BroadcastEvent>,
+) {
     let (mut sender, mut receiver) = socket.split();
 
     // Send events to client
     let mut send_task = tokio::spawn(async move {
         let mut rx = rx;
-        loop {
-            match rx.recv().await {
-                Ok(event) => {
-                    let json = serde_json::to_string(&event).unwrap();
-                    if sender.send(Message::Text(json.into())).await.is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
+        while let Ok(event) = rx.recv().await {
+            let json = serde_json::to_string(&event).unwrap();
+            if sender.send(Message::Text(json.into())).await.is_err() {
+                break;
             }
         }
     });

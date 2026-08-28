@@ -15,10 +15,7 @@ pub async fn require_auth(
         return Ok(next.run(req).await);
     }
 
-    let is_mutation = matches!(
-        req.method().as_str(),
-        "POST" | "PUT" | "PATCH" | "DELETE"
-    );
+    let is_mutation = matches!(req.method().as_str(), "POST" | "PUT" | "PATCH" | "DELETE");
     if is_mutation {
         let has_header = req
             .headers()

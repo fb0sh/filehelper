@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod auth;
 mod config;
 mod db;
@@ -56,11 +57,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Hash and store password if not already stored
     if auth_enabled {
-        let existing = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM meta WHERE key = 'password_hash'",
-        )
-        .fetch_optional(&pool)
-        .await?;
+        let existing =
+            sqlx::query_scalar::<_, String>("SELECT value FROM meta WHERE key = 'password_hash'")
+                .fetch_optional(&pool)
+                .await?;
         if existing.is_none() {
             let hash = auth::password::hash_password(&password)
                 .map_err(|e| format!("Password hashing error: {e}"))?;
@@ -111,9 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if !addr.ip().is_loopback() {
         println!();
-        println!(
-            "⚠ Security: HTTP on non-loopback — consider using a reverse proxy with TLS."
-        );
+        println!("⚠ Security: HTTP on non-loopback — consider using a reverse proxy with TLS.");
     }
 
     println!();
@@ -138,22 +136,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn load_or_create_salt(pool: &sqlx::SqlitePool) -> Result<[u8; 32], Box<dyn std::error::Error>> {
-    let existing = sqlx::query_scalar::<_, String>("SELECT value FROM meta WHERE key = 'auth_salt'")
-        .fetch_optional(pool)
-        .await?;
+async fn load_or_create_salt(
+    pool: &sqlx::SqlitePool,
+) -> Result<[u8; 32], Box<dyn std::error::Error>> {
+    let existing =
+        sqlx::query_scalar::<_, String>("SELECT value FROM meta WHERE key = 'auth_salt'")
+            .fetch_optional(pool)
+            .await?;
 
     if let Some(salt_str) = existing {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &salt_str,
-        )?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &salt_str)?;
         let mut salt = [0u8; 32];
         salt.copy_from_slice(&bytes[..32]);
         Ok(salt)
     } else {
         let salt: [u8; 32] = rand::random();
-        let encoded = base64::engine::general_purpose::STANDARD.encode(&salt);
+        let encoded = base64::engine::general_purpose::STANDARD.encode(salt);
         sqlx::query("INSERT INTO meta (key, value) VALUES ('auth_salt', ?1)")
             .bind(&encoded)
             .execute(pool)

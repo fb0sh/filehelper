@@ -1,15 +1,14 @@
 mod auth;
-mod messages;
-mod uploads;
 mod files;
-mod search;
 mod info;
+mod messages;
+mod search;
+mod uploads;
 
 use crate::state::AppState;
 use axum::{
-    middleware,
+    Router, middleware,
     routing::{delete, get, post},
-    Router,
 };
 
 pub fn build_router(state: AppState) -> Router {
@@ -37,7 +36,5 @@ pub fn build_router(state: AppState) -> Router {
 
     let api = public.merge(protected);
 
-    Router::new()
-        .nest("/api/v1", api)
-        .with_state(state)
+    Router::new().nest("/api/v1", api).with_state(state)
 }

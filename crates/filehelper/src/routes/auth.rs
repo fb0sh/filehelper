@@ -1,8 +1,8 @@
 use crate::auth;
 use crate::state::AppState;
+use axum::Json;
 use axum::extract::State;
 use axum::response::Response;
-use axum::Json;
 
 pub async fn login(
     State(state): State<AppState>,

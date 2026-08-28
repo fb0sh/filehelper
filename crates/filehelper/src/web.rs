@@ -1,5 +1,5 @@
-use axum::response::Response;
 use axum::body::Body;
+use axum::response::Response;
 use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
@@ -12,9 +12,12 @@ pub fn serve_static(path: &str) -> Option<Response> {
 
     if let Some(file) = WebAssets::get(path) {
         let mime = mime_guess::from_path(path).first_or_octet_stream();
-        let is_hashed = path.contains('.') && path.split('/').last().map(|f| {
-            f.split('.').count() > 2 && f.contains('-')
-        }).unwrap_or(false);
+        let is_hashed = path.contains('.')
+            && path
+                .split('/')
+                .next_back()
+                .map(|f| f.split('.').count() > 2 && f.contains('-'))
+                .unwrap_or(false);
 
         let mut builder = Response::builder()
             .header("Content-Type", mime.as_ref())
