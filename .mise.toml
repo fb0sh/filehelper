@@ -8,14 +8,7 @@ RUSTC_WRAPPER = ""
 
 [tasks.build]
 description = "Build frontend and release binary"
-run = """
-pnpm install --frozen-lockfile
-cd web && npx vite build
-cargo build --release
-echo ""
-echo "Binary: ./target/release/filehelper"
-echo "Run: ./target/release/filehelper --addr 0.0.0.0:8080 --password 123"
-"""
+run = "./scripts/build.sh"
 
 [tasks.dev]
 description = "Start backend and frontend dev servers"
@@ -25,7 +18,7 @@ cargo run -p filehelper -- --addr 127.0.0.1:8080 --password 123 &
 BACKEND_PID=$!
 sleep 1
 echo "Starting frontend on :5173..."
-pnpm --dir web dev &
+cd web && npx vite &
 FRONTEND_PID=$!
 echo ""
 echo "Backend:  http://127.0.0.1:8080"
@@ -37,23 +30,8 @@ wait
 
 [tasks.test]
 description = "Run all tests"
-run = """
-cargo fmt --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --test integration_test
-cd web && npx vitest run
-"""
+run = "./scripts/test.sh"
 
 [tasks.release]
 description = "Full release build with checks"
-run = """
-cargo fmt --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --test integration_test
-cd web && npx vitest run
-pnpm --dir web build
-cargo build --release
-echo ""
-echo "=== Release built ==="
-ls -lh target/release/filehelper
-"""
+run = "./scripts/release.sh"
