@@ -18,7 +18,7 @@ export function Sidebar() {
     refetchInterval: 30000,
   });
 
-  const lastMessage = data?.messages[0];
+  const lastMessage = data?.messages?.[0];
 
   const handleChatClick = () => {
     setMobileChatOpen(true);

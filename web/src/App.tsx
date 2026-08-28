@@ -1,6 +1,7 @@
 import { useAuthStore } from './stores/auth';
 import { LoginPage } from './features/auth/LoginPage';
 import { MainLayout } from './features/MainLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect, useState } from 'react';
 
 export default function App() {
@@ -48,5 +49,9 @@ export default function App() {
     return <LoginPage />;
   }
 
-  return <MainLayout />;
+  return (
+    <ErrorBoundary>
+      <MainLayout />
+    </ErrorBoundary>
+  );
 }

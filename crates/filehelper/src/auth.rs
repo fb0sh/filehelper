@@ -1,6 +1,6 @@
 pub mod middleware;
 pub mod password;
-mod session;
+pub mod session;
 
 pub use middleware::require_auth;
 

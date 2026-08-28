@@ -1,5 +1,6 @@
 import { Sidebar } from './sidebar/Sidebar';
 import { Chat } from './chat/Chat';
+import { SearchPanel } from './search/SearchPanel';
 import { useUIStore } from '../stores/ui';
 import { useRealtimeStore } from '../stores/realtime';
 import { useEffect } from 'react';
@@ -9,7 +10,7 @@ import { Message } from '../api';
 import styles from './MainLayout.module.scss';
 
 export function MainLayout() {
-  const { sidebarOpen, mobileChatOpen, setSidebarOpen } = useUIStore();
+  const { sidebarOpen, mobileChatOpen, searchOpen } = useUIStore();
   const { setStatus } = useRealtimeStore();
   const queryClient = useQueryClient();
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
@@ -19,9 +20,9 @@ export function MainLayout() {
       setStatus('connected');
       if (event.type === 'message.created' && event.message) {
         queryClient.setQueryData(['messages'], (old: any) => {
-          if (!old?.pages) return old;
+          if (!old?.pages || old.pages.length === 0) return old;
           const pages = [...old.pages];
-          const firstPage = { ...pages[0], messages: [event.message, ...pages[0].messages] };
+          const firstPage = { ...pages[0], messages: [event.message, ...(pages[0]?.messages || [])] };
           pages[0] = firstPage;
           return { ...old, pages };
         });
@@ -57,6 +58,7 @@ export function MainLayout() {
     <div className={styles.layout}>
       <Sidebar />
       <Chat />
+      {searchOpen && <SearchPanel />}
     </div>
   );
 }
