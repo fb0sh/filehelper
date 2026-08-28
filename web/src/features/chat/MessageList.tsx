@@ -1,7 +1,9 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { messagesApi, Message } from '../../api';
-import { useEffect, useRef, useCallback } from 'react';
+import { useUploadStore } from '../../stores/upload';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { MessageBubble } from './messages/MessageBubble';
+import { UploadMessage } from './messages/UploadMessage';
 import { DateSeparator } from './DateSeparator';
 import { ScrollToBottom } from './ScrollToBottom';
 import { formatDateSeparator } from '../../lib/dates';
@@ -12,6 +14,15 @@ export function MessageList() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevScrollHeight = useRef(0);
   const isLoadingMore = useRef(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+
+  const uploadTasks = useUploadStore((s) => s.tasks);
+  const cancelTask = useUploadStore((s) => s.cancelTask);
+  const retryTask = useUploadStore((s) => s.retryTask);
+
+  const activeTasks = uploadTasks.filter(
+    (t) => t.status === 'uploading' || t.status === 'queued' || t.status === 'failed' || t.status === 'cancelled'
+  );
 
   const {
     data,
@@ -27,10 +38,8 @@ export function MessageList() {
   });
 
   const allMessages = data?.pages.flatMap((p) => p.messages) ?? [];
-  // Reverse to show oldest first
   const messages = [...allMessages].reverse();
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (containerRef.current && !isLoadingMore.current) {
       const container = containerRef.current;
@@ -39,12 +48,14 @@ export function MessageList() {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       }
     }
-  }, [messages.length]);
+  }, [messages.length, activeTasks.length]);
 
-  // Scroll anchor for prepending
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container || !hasNextPage || isFetchingNextPage) return;
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
+    setShowScrollBtn(!isNearBottom);
 
     if (container.scrollTop < 50) {
       isLoadingMore.current = true;
@@ -61,7 +72,6 @@ export function MessageList() {
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Group messages by date
   const grouped = groupByDate(messages);
   const isNearBottom = useCallback(() => {
     const c = containerRef.current;
@@ -87,11 +97,24 @@ export function MessageList() {
             ))}
           </div>
         ))}
+        {/* Upload progress bubbles */}
+        {activeTasks.map((task) => (
+          <div key={task.id} style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 8px' }}>
+            <UploadMessage
+              task={task}
+              onCancel={cancelTask}
+              onRetry={retryTask}
+            />
+          </div>
+        ))}
         <div ref={bottomRef} />
       </div>
       <ScrollToBottom
-        visible={!isNearBottom()}
-        onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+        visible={showScrollBtn}
+        onClick={() => {
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+          setShowScrollBtn(false);
+        }}
       />
     </div>
   );

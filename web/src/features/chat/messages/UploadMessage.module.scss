@@ -1,0 +1,117 @@
+.bubble {
+  max-width: var(--bubble-max-width);
+  background: var(--message-out-background);
+  color: var(--message-out-text);
+  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+
+  &.failed {
+    border-left: 3px solid var(--danger-color);
+  }
+
+  &.cancelled {
+    opacity: 0.6;
+  }
+
+  &.completed {
+    animation: fadeOut 0.5s 1s ease-out forwards;
+  }
+}
+
+.icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.iconLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+}
+
+.progressRing {
+  width: 44px;
+  height: 44px;
+}
+
+.progressFill {
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.filename {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.details {
+  font-size: 12px;
+  color: var(--message-out-meta);
+  display: flex;
+  gap: 8px;
+}
+
+.speed {
+  opacity: 0.8;
+}
+
+.error {
+  font-size: 12px;
+  color: var(--danger-color);
+}
+
+.status {
+  font-size: 12px;
+  color: var(--message-out-meta);
+}
+
+.actions {
+  flex-shrink: 0;
+}
+
+.cancelBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--message-out-meta);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.1);
+  }
+}
+
+.retryBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.1);
+  }
+}

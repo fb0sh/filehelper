@@ -1,17 +1,18 @@
-import { useState, useRef, useCallback, KeyboardEvent, ChangeEvent, DragEvent } from 'react';
+import { useState, useRef, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { messagesApi, uploadFile } from '../../api';
+import { messagesApi } from '../../api';
 import { useUploadStore } from '../../stores/upload';
-import { Smile, Paperclip, Send, Mic } from 'lucide-react';
+import { Smile, Paperclip, Send, Mic, Image, File } from 'lucide-react';
 import styles from './Composer.module.scss';
 
 export function Composer() {
   const [text, setText] = useState('');
-  const [dragOver, setDragOver] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
-  const { addTask, updateTask } = useUploadStore();
+  const addTasks = useUploadStore((s) => s.addTasks);
 
   const sendMutation = useMutation({
     mutationFn: (text: string) => messagesApi.create(text),
@@ -47,136 +48,109 @@ export function Composer() {
   const handlePaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+    const files: File[] = [];
     for (const item of items) {
       if (item.type.startsWith('image/')) {
-        e.preventDefault();
         const file = item.getAsFile();
-        if (file) uploadFiles([file]);
-        break;
+        if (file) files.push(file);
       }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      addTasks(files);
     }
   };
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files) uploadFiles(Array.from(files));
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const uploadFiles = (files: File[]) => {
-    for (const file of files) {
-      const taskId = `tmp:${crypto.randomUUID()}`;
-      addTask({
-        id: taskId,
-        file,
-        status: 'uploading',
-        progress: 0,
-        loaded: 0,
-        total: file.size,
-        speed: 0,
-      });
-
-      let lastLoaded = 0;
-      let lastTime = Date.now();
-
-      uploadFile({
-        file,
-        onProgress: (loaded, total) => {
-          const now = Date.now();
-          const dt = (now - lastTime) / 1000;
-          const speed = dt > 0 ? (loaded - lastLoaded) / dt : 0;
-          lastLoaded = loaded;
-          lastTime = now;
-          updateTask(taskId, {
-            loaded,
-            total,
-            progress: total > 0 ? (loaded / total) * 100 : 0,
-            speed,
-          });
-        },
-      })
-        .then((message) => {
-          updateTask(taskId, { status: 'completed', messageId: message.id });
-          queryClient.invalidateQueries({ queryKey: ['messages'] });
-        })
-        .catch((err) => {
-          updateTask(taskId, { status: 'failed', error: err.message });
-        });
+    if (files && files.length > 0) {
+      addTasks(Array.from(files));
     }
-  };
-
-  const handleDragOver = (e: DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e: DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = e.dataTransfer?.files;
-    if (files) uploadFiles(Array.from(files));
+    e.target.value = '';
+    setPopoverOpen(false);
   };
 
   return (
-    <>
-      {dragOver && (
-        <div
-          className={styles.dropOverlay}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <div className={styles.dropContent}>
-            <div className={styles.dropIcon}>
-              <Paperclip size={32} />
-            </div>
-            <div className={styles.dropText}>Drop files here</div>
-          </div>
+    <div className={styles.composer}>
+      <div className={styles.inner}>
+        <button className={styles.iconBtn} aria-label="Emoji">
+          <Smile size={22} />
+        </button>
+        <div className={styles.inputWrapper}>
+          <textarea
+            ref={textareaRef}
+            className={styles.textarea}
+            value={text}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder="Message"
+            rows={1}
+          />
         </div>
-      )}
-      <div className={styles.composer} onDragOver={handleDragOver}>
-        <div className={styles.inner}>
-          <button className={styles.iconBtn} aria-label="Emoji">
-            <Smile size={22} />
-          </button>
-          <div className={styles.inputWrapper}>
-            <textarea
-              ref={textareaRef}
-              className={styles.textarea}
-              value={text}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder="Message"
-              rows={1}
-            />
-          </div>
-          <button className={styles.iconBtn} onClick={() => fileInputRef.current?.click()} aria-label="Attach">
+
+        {/* Paperclip button with popover */}
+        <div className={styles.attachWrapper}>
+          <button
+            className={styles.iconBtn}
+            onClick={() => setPopoverOpen(!popoverOpen)}
+            aria-label="Attach"
+          >
             <Paperclip size={22} />
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileSelect}
-            style={{ display: 'none' }}
-          />
-          {text.trim() ? (
-            <button className={styles.sendBtn} onClick={handleSend} aria-label="Send">
-              <Send size={20} />
-            </button>
-          ) : (
-            <button className={styles.iconBtn} aria-label="Record">
-              <Mic size={22} />
-            </button>
+          {popoverOpen && (
+            <>
+              <div className={styles.popoverOverlay} onClick={() => setPopoverOpen(false)} />
+              <div className={styles.popover}>
+                <button
+                  className={styles.popoverItem}
+                  onClick={() => {
+                    imageInputRef.current?.click();
+                  }}
+                >
+                  <Image size={20} />
+                  <span>Photo or Video</span>
+                </button>
+                <button
+                  className={styles.popoverItem}
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <File size={20} />
+                  <span>File</span>
+                </button>
+              </div>
+            </>
           )}
         </div>
+
+        <input
+          ref={imageInputRef}
+          type="file"
+          multiple
+          accept="image/*,video/*"
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
+
+        {text.trim() ? (
+          <button className={styles.sendBtn} onClick={handleSend} aria-label="Send">
+            <Send size={20} />
+          </button>
+        ) : (
+          <button className={styles.iconBtn} aria-label="Record">
+            <Mic size={22} />
+          </button>
+        )}
       </div>
-    </>
+    </div>
   );
 }

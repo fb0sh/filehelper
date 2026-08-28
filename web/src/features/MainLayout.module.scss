@@ -22,3 +22,36 @@
     transform: translateX(100%);
   }
 }
+
+.dropOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(51, 144, 236, 0.92);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+  pointer-events: all;
+}
+
+.dropContent {
+  text-align: center;
+  color: white;
+}
+
+.dropIcon {
+  margin-bottom: 16px;
+  opacity: 0.9;
+}
+
+.dropTitle {
+  font-size: 22px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.dropSubtitle {
+  font-size: 14px;
+  opacity: 0.8;
+}

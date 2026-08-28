@@ -7,6 +7,10 @@ import { useEffect } from 'react';
 import { createWebSocket } from '../lib/websocket';
 import { useQueryClient } from '@tanstack/react-query';
 import { Message } from '../api';
+import { useGlobalDragDrop } from '../hooks/useGlobalDragDrop';
+import { useGlobalPaste } from '../hooks/useGlobalPaste';
+import { useUploadManager } from '../hooks/useUploadManager';
+import { Paperclip } from 'lucide-react';
 import styles from './MainLayout.module.scss';
 
 export function MainLayout() {
@@ -14,6 +18,11 @@ export function MainLayout() {
   const { setStatus } = useRealtimeStore();
   const queryClient = useQueryClient();
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+  // Global drag/drop and paste
+  const dragOver = useGlobalDragDrop();
+  useGlobalPaste();
+  useUploadManager();
 
   useEffect(() => {
     const cleanup = createWebSocket((event) => {
@@ -41,24 +50,37 @@ export function MainLayout() {
     return cleanup;
   }, [queryClient, setStatus]);
 
-  if (isMobile) {
-    return (
-      <div className={styles.mobileLayout}>
-        <div className={`${styles.mobilePanel} ${mobileChatOpen ? styles.hidden : ''}`}>
-          <Sidebar />
-        </div>
-        <div className={`${styles.mobilePanel} ${!mobileChatOpen ? styles.hidden : ''}`}>
-          <Chat />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.layout}>
-      <Sidebar />
-      <Chat />
-      {searchOpen && <SearchPanel />}
-    </div>
+    <>
+      {/* Global drag overlay */}
+      {dragOver && (
+        <div className={styles.dropOverlay}>
+          <div className={styles.dropContent}>
+            <div className={styles.dropIcon}>
+              <Paperclip size={48} />
+            </div>
+            <div className={styles.dropTitle}>Drop files here</div>
+            <div className={styles.dropSubtitle}>to send them to FileHelper</div>
+          </div>
+        </div>
+      )}
+
+      {isMobile ? (
+        <div className={styles.mobileLayout}>
+          <div className={`${styles.mobilePanel} ${mobileChatOpen ? styles.hidden : ''}`}>
+            <Sidebar />
+          </div>
+          <div className={`${styles.mobilePanel} ${!mobileChatOpen ? styles.hidden : ''}`}>
+            <Chat />
+          </div>
+        </div>
+      ) : (
+        <div className={styles.layout}>
+          <Sidebar />
+          <Chat />
+          {searchOpen && <SearchPanel />}
+        </div>
+      )}
+    </>
   );
 }
