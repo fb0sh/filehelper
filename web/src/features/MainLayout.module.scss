@@ -1,26 +1,9 @@
 .layout {
   display: flex;
+  justify-content: center;
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
-}
-
-.mobileLayout {
-  height: 100dvh;
-  width: 100vw;
-  overflow: hidden;
-  position: relative;
-}
-
-.mobilePanel {
-  position: absolute;
-  inset: 0;
-  transition: transform 0.3s ease;
-  background: var(--surface-color);
-
-  &.hidden {
-    transform: translateX(100%);
-  }
 }
 
 .dropOverlay {

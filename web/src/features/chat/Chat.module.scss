@@ -1,9 +1,9 @@
 .chat {
-  flex: 1;
+  width: 100%;
+  max-width: 728px;
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  min-width: 0;
   background-color: var(--chat-background);
   background-image: url('/wallpaper.svg');
   background-repeat: repeat;
@@ -11,6 +11,8 @@
   background-attachment: fixed;
   position: relative;
   overflow: hidden;
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
 
   &::before {
     content: '';

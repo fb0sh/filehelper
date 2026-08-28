@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, KeyboardEvent, ChangeEvent } from 'react
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { messagesApi } from '../../api';
 import { useUploadStore } from '../../stores/upload';
-import { Smile, Paperclip, Send, Mic, Image, File } from 'lucide-react';
+import { Paperclip, Send, Image, File } from 'lucide-react';
 import styles from './Composer.module.scss';
 
 export function Composer() {
@@ -73,9 +73,6 @@ export function Composer() {
   return (
     <div className={styles.composer}>
       <div className={styles.inner}>
-        <button className={styles.iconBtn} aria-label="Emoji">
-          <Smile size={22} />
-        </button>
         <div className={styles.inputWrapper}>
           <textarea
             ref={textareaRef}
@@ -89,7 +86,6 @@ export function Composer() {
           />
         </div>
 
-        {/* Paperclip button with popover */}
         <div className={styles.attachWrapper}>
           <button
             className={styles.iconBtn}
@@ -104,18 +100,14 @@ export function Composer() {
               <div className={styles.popover}>
                 <button
                   className={styles.popoverItem}
-                  onClick={() => {
-                    imageInputRef.current?.click();
-                  }}
+                  onClick={() => imageInputRef.current?.click()}
                 >
                   <Image size={20} />
                   <span>Photo or Video</span>
                 </button>
                 <button
                   className={styles.popoverItem}
-                  onClick={() => {
-                    fileInputRef.current?.click();
-                  }}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <File size={20} />
                   <span>File</span>
@@ -141,15 +133,9 @@ export function Composer() {
           style={{ display: 'none' }}
         />
 
-        {text.trim() ? (
-          <button className={styles.sendBtn} onClick={handleSend} aria-label="Send">
-            <Send size={20} />
-          </button>
-        ) : (
-          <button className={styles.iconBtn} aria-label="Record">
-            <Mic size={22} />
-          </button>
-        )}
+        <button className={styles.sendBtn} onClick={handleSend} aria-label="Send">
+          <Send size={20} />
+        </button>
       </div>
     </div>
   );

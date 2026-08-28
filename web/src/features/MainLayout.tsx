@@ -1,7 +1,4 @@
-import { Sidebar } from './sidebar/Sidebar';
 import { Chat } from './chat/Chat';
-import { SearchPanel } from './search/SearchPanel';
-import { useUIStore } from '../stores/ui';
 import { useRealtimeStore } from '../stores/realtime';
 import { useEffect } from 'react';
 import { createWebSocket } from '../lib/websocket';
@@ -14,12 +11,9 @@ import { Paperclip } from 'lucide-react';
 import styles from './MainLayout.module.scss';
 
 export function MainLayout() {
-  const { sidebarOpen, mobileChatOpen, searchOpen } = useUIStore();
   const { setStatus } = useRealtimeStore();
   const queryClient = useQueryClient();
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-  // Global drag/drop and paste
   const dragOver = useGlobalDragDrop();
   useGlobalPaste();
   useUploadManager();
@@ -52,7 +46,6 @@ export function MainLayout() {
 
   return (
     <>
-      {/* Global drag overlay */}
       {dragOver && (
         <div className={styles.dropOverlay}>
           <div className={styles.dropContent}>
@@ -65,22 +58,9 @@ export function MainLayout() {
         </div>
       )}
 
-      {isMobile ? (
-        <div className={styles.mobileLayout}>
-          <div className={`${styles.mobilePanel} ${mobileChatOpen ? styles.hidden : ''}`}>
-            <Sidebar />
-          </div>
-          <div className={`${styles.mobilePanel} ${!mobileChatOpen ? styles.hidden : ''}`}>
-            <Chat />
-          </div>
-        </div>
-      ) : (
-        <div className={styles.layout}>
-          <Sidebar />
-          <Chat />
-          {searchOpen && <SearchPanel />}
-        </div>
-      )}
+      <div className={styles.layout}>
+        <Chat />
+      </div>
     </>
   );
 }
