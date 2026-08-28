@@ -1,0 +1,28 @@
+.container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.messagesWrapper {
+  max-width: 728px;
+  margin: 0 auto;
+  padding: 16px 16px 8px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.loadingMore {
+  text-align: center;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}

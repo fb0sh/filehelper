@@ -1,0 +1,106 @@
+.composer {
+  flex-shrink: 0;
+  padding: 8px 16px 12px;
+  background: var(--surface-color);
+  border-top: 1px solid var(--border-color);
+  position: relative;
+  z-index: 2;
+}
+
+.inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 728px;
+  margin: 0 auto;
+}
+
+.iconBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover {
+    background: var(--hover-color);
+    color: var(--primary-color);
+  }
+}
+
+.inputWrapper {
+  flex: 1;
+  background: var(--surface-color-secondary);
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  transition: border-color var(--transition-fast);
+
+  &:focus-within {
+    border-color: var(--primary-color);
+  }
+}
+
+.textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  resize: none;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  max-height: 150px;
+  padding: 4px 8px;
+  font-family: var(--font-family);
+
+  &::placeholder {
+    color: var(--text-tertiary);
+  }
+}
+
+.sendBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-color);
+  color: white;
+  flex-shrink: 0;
+  transition: opacity var(--transition-fast);
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.dropOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-background);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.dropContent {
+  text-align: center;
+  color: white;
+}
+
+.dropIcon {
+  margin-bottom: 12px;
+}
+
+.dropText {
+  font-size: 18px;
+  font-weight: 500;
+}

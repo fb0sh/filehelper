@@ -1,0 +1,110 @@
+.loginPage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100dvh;
+  background: var(--surface-color);
+  padding: 16px;
+}
+
+.loginCard {
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+
+.form {
+  text-align: left;
+}
+
+.inputGroup {
+  position: relative;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 16px 8px;
+  margin-bottom: 16px;
+  transition: border-color var(--transition-fast);
+  background: var(--surface-color);
+
+  &.focused {
+    border-color: var(--primary-color);
+  }
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  transition: color var(--transition-fast);
+
+  .focused & {
+    color: var(--primary-color);
+  }
+}
+
+.input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  font-size: 16px;
+  color: var(--text-primary);
+  padding: 0;
+  line-height: 1.4;
+}
+
+.error {
+  color: var(--danger-color);
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(var(--danger-color-rgb), 0.08);
+  border-radius: 8px;
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 12px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}

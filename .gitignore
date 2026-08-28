@@ -1,0 +1,36 @@
+# Build artifacts
+target/
+web/dist/
+web/node_modules/
+
+# Data
+data/
+test-data/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Reference
+reference/
+
+# Test
+tests/visual/
+playwright-report/
+test-results/
+
+# Rust
+**/*.rs.bk
+
+# Logs
+*.log

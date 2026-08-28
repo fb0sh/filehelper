@@ -1,0 +1,101 @@
+.header {
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iconBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--hover-color);
+  }
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.info {
+  min-width: 0;
+}
+
+.name {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+
+.menu {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  background: var(--menu-background);
+  border-radius: 12px;
+  box-shadow: var(--shadow-heavy);
+  padding: 4px;
+  min-width: 180px;
+  z-index: 6;
+  animation: scaleIn 0.15s ease-out;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 15px;
+  text-align: left;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--menu-hover);
+  }
+}

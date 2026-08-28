@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="none"/>
+  <g opacity="0.5">
+    <path d="M30 40 Q50 20 70 40 Q90 60 70 80 Q50 100 30 80 Q10 60 30 40z" fill="none" stroke="#8599a6" stroke-width="1.2"/>
+    <path d="M130 30 Q150 10 170 30 Q190 50 170 70 Q150 90 130 70 Q110 50 130 30z" fill="none" stroke="#8599a6" stroke-width="1.2"/>
+    <circle cx="50" cy="140" r="16" fill="none" stroke="#8599a6" stroke-width="1.2"/>
+    <circle cx="150" cy="130" r="12" fill="none" stroke="#8599a6" stroke-width="1.2"/>
+    <path d="M90 20 L100 10 L110 20 L100 30z" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <path d="M20 100 L30 90 L40 100 L30 110z" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <path d="M170 80 L180 70 L190 80 L180 90z" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <path d="M80 170 L95 160 L110 170 L95 180z" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <path d="M160 170 L170 160 L180 170 L170 180z" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <path d="M40 175 Q55 165 70 175 Q55 185 40 175z" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <circle cx="100" cy="100" r="8" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <circle cx="180" cy="40" r="6" fill="none" stroke="#8599a6" stroke-width="1"/>
+    <circle cx="25" cy="60" r="5" fill="none" stroke="#8599a6" stroke-width="1"/>
+  </g>
+</svg>

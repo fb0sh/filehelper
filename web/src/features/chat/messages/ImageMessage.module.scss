@@ -1,0 +1,46 @@
+.bubble {
+  max-width: var(--bubble-max-width);
+  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+
+  &:hover {
+    transform: scale(1.01);
+  }
+}
+
+.imageWrapper {
+  position: relative;
+  max-width: 380px;
+}
+
+.image {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  object-fit: cover;
+  display: block;
+}
+
+.overlay {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.4));
+  border-radius: 0 0 var(--bubble-radius) 0;
+}
+
+.time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.check {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+}

@@ -1,0 +1,20 @@
+.separator {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.pill {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+}
+
+[data-theme="dark"] .pill {
+  background: rgba(255, 255, 255, 0.08);
+}

@@ -1,0 +1,33 @@
+.bubble {
+  max-width: var(--bubble-max-width);
+  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
+  overflow: hidden;
+}
+
+.videoWrapper {
+  position: relative;
+  max-width: 380px;
+}
+
+.video {
+  width: 100%;
+  max-height: 320px;
+  display: block;
+  background: #000;
+}
+
+.overlay {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.4));
+}
+
+.time, .check {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+}
