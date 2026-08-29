@@ -181,6 +181,33 @@ test.describe('FileHelper v2.0 E2E', () => {
     await server.stop();
   });
 
+  test('upload works without crypto.randomUUID (LAN HTTP has no secure context)', async ({ page }) => {
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    await login(page, base, uniqueCode('nouuid'));
+
+    // Simulate an insecure context (plain-HTTP LAN access): there,
+    // crypto.randomUUID is undefined and the old code crashed with
+    // "TypeError: crypto.randomUUID is not a function" on upload.
+    await page.evaluate(() => {
+      Object.defineProperty(window.crypto, 'randomUUID', { value: undefined });
+    });
+
+    const before = await page.locator('div[data-message-id]').count();
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'lan-upload.bin',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('insecure-context-simulation'),
+    });
+    await page.locator('button[aria-label="Send file"]').click();
+    await page.waitForFunction(
+      (n) => document.querySelectorAll('div[data-message-id]').length > n,
+      before,
+      { timeout: 20000 }
+    );
+    await server.stop();
+  });
+
   test('file upload + download: decrypted bytes match the original', async ({ page }) => {
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;

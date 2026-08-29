@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { randomUUID } from '../lib/randomId';
 
 export interface UploadTask {
   id: string;
@@ -41,7 +42,7 @@ export const useUploadStore = create<UploadState>((set, get) => ({
 
   addTasks: (files, caption) => {
     const newTasks: UploadTask[] = files.map((file) => ({
-      id: `tmp:${crypto.randomUUID()}`,
+      id: `tmp:${randomUUID()}`,
       file,
       status: 'queued' as const,
       progress: 0,

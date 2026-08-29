@@ -3,6 +3,17 @@
 All notable changes to FileHelper are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## 2.0.3 — 2026-08-30
+
+### Fixes
+
+- **File uploads no longer crash over LAN HTTP.** `crypto.randomUUID()` is
+  only available in secure contexts (HTTPS or localhost), so uploading
+  from another device (`http://192.168.x.x:8080`) threw
+  `TypeError: crypto.randomUUID is not a function`. Upload task ids now
+  use a UUID built from `crypto.getRandomValues`, which works in every
+  context. Regression test simulates the insecure context.
+
 ## 2.0.2 — 2026-08-30
 
 ### Changes
