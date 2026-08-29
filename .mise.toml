@@ -14,7 +14,7 @@ run = "./scripts/build.sh"
 description = "Start backend and frontend dev servers"
 run = """
 echo "Starting backend on :8080..."
-cargo run -p filehelper -- --addr 127.0.0.1:8080 --password 123 &
+cargo run -p filehelper -- --addr 127.0.0.1:8080 &
 BACKEND_PID=$!
 sleep 1
 echo "Starting frontend on :5173..."
