@@ -1,24 +1,31 @@
 .btn {
   position: absolute;
-  // Near the right edge of the ~728px message/composer column, not the
+  // Anchored to the composer/content rail's right edge — not to the
   // whole (possibly very wide) chat viewport.
-  right: max(16px, calc((100% - 728px) / 2 - 48px));
-  bottom: 12px;
+  right: max(
+    16px,
+    calc((100% - min(var(--tg-content-width), calc(100% - 32px))) / 2 + 8px)
+  );
+  bottom: calc(var(--tg-composer-min-height) + 32px);
   width: 44px;
   height: 44px;
   border-radius: 50%;
   background: var(--surface-color);
-  box-shadow: var(--shadow-medium);
+  box-shadow: var(--tg-floating-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
   z-index: 10;
   animation: fadeIn 0.15s ease-out;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast);
 
   &:hover {
     background: var(--hover-color-secondary);
+  }
+
+  &:active {
+    transform: scale(0.94);
   }
 }
 

@@ -2,8 +2,9 @@
   max-width: var(--bubble-max-width);
   background: var(--message-out-background);
   color: var(--message-out-text);
-  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
-  padding: 8px 12px 4px;
+  border-radius: var(--tg-bubble-radius) var(--tg-bubble-radius-small) var(--tg-bubble-radius) var(--tg-bubble-radius);
+  box-shadow: var(--tg-bubble-shadow);
+  padding: 7px 10px 5px 12px;
   position: relative;
   word-break: break-word;
   line-height: 1.4;

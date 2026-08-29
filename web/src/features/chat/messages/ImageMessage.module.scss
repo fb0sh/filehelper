@@ -1,6 +1,7 @@
 .bubble {
   max-width: var(--bubble-max-width);
-  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
+  border-radius: var(--tg-bubble-radius) var(--tg-bubble-radius-small) var(--tg-bubble-radius) var(--tg-bubble-radius);
+  box-shadow: var(--tg-bubble-shadow);
   overflow: hidden;
   cursor: pointer;
   transition: transform var(--transition-fast);
@@ -32,7 +33,7 @@
   align-items: center;
   gap: 4px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.4));
-  border-radius: 0 0 var(--bubble-radius) 0;
+  border-radius: 0 0 var(--tg-bubble-radius) 0;
 }
 
 .time {
@@ -71,8 +72,9 @@
   max-width: var(--bubble-max-width);
   background: var(--message-out-background);
   color: var(--message-out-text);
-  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
-  padding: 10px 12px;
+  border-radius: var(--tg-bubble-radius) var(--tg-bubble-radius-small) var(--tg-bubble-radius) var(--tg-bubble-radius);
+  box-shadow: var(--tg-bubble-shadow);
+  padding: 9px 12px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -82,7 +84,7 @@
 .cardIcon {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: 11px;
   background: rgba(0, 0, 0, 0.12);
   display: flex;
   align-items: center;

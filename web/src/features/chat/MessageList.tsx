@@ -160,9 +160,9 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   }
 
   return (
-    <div className={styles.viewport}>
+    <div className={styles.viewport} data-tg="message-viewport">
       <div className={styles.container} ref={containerRef} onScroll={handleScroll}>
-        <div className={styles.messagesWrapper}>
+        <div className={styles.messagesWrapper} data-tg="message-rail">
           {isFetchingNextPage && (
             <div className={styles.loadingMore}>Loading...</div>
           )}

@@ -2,12 +2,13 @@
   max-width: var(--bubble-max-width);
   background: var(--message-out-background);
   color: var(--message-out-text);
-  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
-  padding: 10px 12px;
+  border-radius: var(--tg-bubble-radius) var(--tg-bubble-radius-small) var(--tg-bubble-radius) var(--tg-bubble-radius);
+  box-shadow: var(--tg-bubble-shadow);
+  padding: 9px 12px;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 
   &.failed {
     border-left: 3px solid var(--danger-color);

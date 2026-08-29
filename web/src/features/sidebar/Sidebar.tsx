@@ -55,7 +55,7 @@ export function Sidebar() {
     'end-to-end encrypted';
 
   return (
-    <div className={styles.sidebar}>
+    <div className={styles.sidebar} data-tg="sidebar">
       <div className={styles.header}>
         <button
           className={styles.iconBtn}

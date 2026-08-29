@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- FileHelper chat wallpaper tile — dense, seamless, hand-drawn Telegram-style
+  <!-- FileHelper chat wallpaper tile (dark) — dense, seamless, hand-drawn Telegram-style
        doodles (white thin lines, low contrast) over a soft pale-green gradient
        that the CSS paints underneath. Objects crossing a tile edge are repeated
        on the opposite edge so the tile joins seamlessly. -->
   <rect width="512" height="512" fill="none"/>
-  <g fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.58">
+  <g fill="none" stroke="#aebfce" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.3">
     <!-- row 1 -->
     <g transform="translate(55 45) scale(1) rotate(-8)"><path d="M-13 3 C-16 -3 -11 -10 -3 -11 C3 -12 9 -9 9 -4 C13 -3 14 2 10 5 C7 8 1 9 -3 7 C-8 10 -11 8 -13 3 Z"/><circle cx="8" cy="-9" r="5"/><path d="M12 -11 L16 -9 L12 -7"/></g>
     <g transform="translate(150 48) scale(1.1) rotate(6)"><circle r="13"/><path d="M0 0 L-12 3 A13 13 0 0 1 -4 -12 Z"/><circle cx="4" cy="-5" r="1.4"/><circle cx="-2" cy="6" r="1.4"/><circle cx="6" cy="5" r="1.4"/><circle cx="-5" cy="-2" r="1.4"/></g>

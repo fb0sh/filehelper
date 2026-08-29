@@ -16,14 +16,14 @@ export function ChatHeader() {
 
   if (searchOpen) {
     return (
-      <div className={styles.header}>
+      <div className={styles.header} data-tg="chat-header">
         <TopbarSearch />
       </div>
     );
   }
 
   return (
-    <div className={styles.header}>
+    <div className={styles.header} data-tg="chat-header">
       <div className={styles.left}>
         {isMobile && (
           <button

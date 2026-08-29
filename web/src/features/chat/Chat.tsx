@@ -42,7 +42,7 @@ export function Chat() {
   }, [selectionActive, exitSelection]);
 
   return (
-    <div className={styles.chat}>
+    <div className={styles.chat} data-tg="chat">
       <ChatHeader />
       <MessageList ref={listRef} />
       {selectionActive ? <SelectionPlate /> : <Composer />}

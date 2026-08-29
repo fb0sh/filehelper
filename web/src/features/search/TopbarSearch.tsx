@@ -11,7 +11,9 @@ import {
   isHistoryLoading,
 } from '../../lib/searchHistory';
 import type { DecryptedMessage } from '../../lib/crypto/messages';
-import { ArrowLeft, Search as SearchIcon, X, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
+import { formatMessageTime } from '../../lib/dates';
+import { SearchHighlightedText } from './SearchHighlightedText';
+import { ArrowLeft, Search as SearchIcon, X, ChevronUp, ChevronDown, Loader2, FileText } from 'lucide-react';
 import styles from './TopbarSearch.module.scss';
 
 // Telegram Web K topbar search, fully client-side: the server stores only
@@ -168,6 +170,49 @@ export function TopbarSearch() {
       <button className={styles.iconBtn} onClick={closeSearch} aria-label="Close search">
         <X size={18} />
       </button>
+      {debouncedQuery && (
+        <div className={styles.panel} data-search-panel="">
+          {results.length === 0 ? (
+            <div className={styles.panelStatus}>
+              {historyLoading ? (
+                <>
+                  <Loader2 size={14} className={styles.spinner} /> Searching…
+                </>
+              ) : (
+                'No messages found'
+              )}
+            </div>
+          ) : (
+            <div className={styles.panelList}>
+              {results.map((r) => (
+                <button
+                  key={r.id}
+                  className={`${styles.row} ${r.id === activeResultId ? styles.rowActive : ''}`}
+                  data-search-row=""
+                  onClick={() => {
+                    setActiveResultId(r.id);
+                    requestJump(r);
+                  }}
+                >
+                  <span className={styles.rowAvatar}>
+                    <FileText size={16} />
+                  </span>
+                  <span className={styles.rowBody}>
+                    <span className={styles.rowTitle}>FileHelper</span>
+                    <span className={styles.rowPreview}>
+                      <SearchHighlightedText
+                        text={r.text ?? r.attachment?.filename ?? 'File'}
+                        query={debouncedQuery}
+                      />
+                    </span>
+                  </span>
+                  <span className={styles.rowTime}>{formatMessageTime(r.createdAt)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,11 +1,15 @@
-// Telegram shell layout tokens
+// Telegram Web K shell layout tokens
 // Shared layout patterns from Telegram Web K
 
-// Chat wallpaper
+// Chat wallpaper: soft pale-green gradient painted by CSS + a dense,
+// seamless doodle tile (SVG) on top. The gradient and doodles both live
+// on the chat pane itself, so they never scroll with the message list.
 .chat-wallpaper {
   background-color: var(--chat-background);
-  background-image: url('/wallpaper.svg');
-  background-repeat: repeat;
-  background-size: 200px 200px;
-  background-attachment: fixed;
+  // First layer paints on top: doodle tile over the gradient.
+  background-image:
+    var(--tg-wallpaper-image),
+    linear-gradient(135deg, var(--tg-wallpaper-grad-a) 0%, var(--tg-wallpaper-grad-b) 55%, var(--tg-wallpaper-grad-c) 100%);
+  background-repeat: repeat, no-repeat;
+  background-size: var(--tg-wallpaper-size) var(--tg-wallpaper-size), cover;
 }

@@ -8,12 +8,16 @@
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: thin;
 }
 
 .messagesWrapper {
-  max-width: 728px;
+  // Centered rail: shares the header/composer center axis. The bottom
+  // padding clears the floating composer so the last message never hides
+  // underneath it.
+  width: min(var(--tg-message-width), calc(100% - var(--tg-chat-gutter) * 2));
   margin: 0 auto;
-  padding: 16px 16px 8px;
+  padding: 12px 0 96px;
 }
 
 .loading {
@@ -35,4 +39,10 @@
 .highlighted {
   animation: highlightFlash 2s ease-out;
   border-radius: 12px;
+}
+
+@media (max-width: 767px) {
+  .messagesWrapper {
+    padding: 8px 0 92px;
+  }
 }

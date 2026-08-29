@@ -2,23 +2,24 @@
   max-width: var(--bubble-max-width);
   background: var(--message-out-background);
   color: var(--message-out-text);
-  border-radius: var(--bubble-radius) 4px var(--bubble-radius) var(--bubble-radius);
-  padding: 10px 12px;
+  border-radius: var(--tg-bubble-radius) var(--tg-bubble-radius-small) var(--tg-bubble-radius) var(--tg-bubble-radius);
+  box-shadow: var(--tg-bubble-shadow);
+  padding: 9px 12px;
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: filter var(--transition-fast);
 
   &:hover {
-    filter: brightness(0.96);
+    filter: brightness(0.97);
   }
 }
 
 .icon {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;

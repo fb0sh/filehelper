@@ -1,18 +1,22 @@
 .plate {
-  background: var(--surface-color);
-  border-top: 1px solid var(--border-color);
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  padding: 0 var(--tg-chat-gutter) var(--tg-chat-gutter);
+  padding-bottom: max(var(--tg-chat-gutter), env(safe-area-inset-bottom));
 }
 
 .inner {
-  max-width: var(--chat-max-width, 728px);
+  width: min(var(--tg-content-width), 100%);
   margin: 0 auto;
+  min-height: var(--tg-composer-min-height);
+  border-radius: var(--tg-floating-radius);
+  background: var(--tg-surface-floating);
+  box-shadow: var(--tg-floating-shadow);
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--composer-background, var(--surface-alt, var(--border-color)));
-  border-radius: 22px;
-  padding: 6px 12px;
+  padding: 8px 16px;
 }
 
 .actionBtn {
@@ -48,4 +52,10 @@
   font-size: 15px;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+@media (max-width: 767px) {
+  .plate {
+    padding: 0 12px max(12px, env(safe-area-inset-bottom));
+  }
 }

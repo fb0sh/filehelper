@@ -67,7 +67,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   test('desktop layout: sidebar + chat fill viewport', async ({ page }) => {
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     await login(page, base, uniqueCode('layout'));
 
     const composer = page.locator('textarea[placeholder="Message"]');
@@ -220,7 +220,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   });
 
   test('search: auto-jump, highlight, keyboard navigation, clean close', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     await login(page, base, uniqueCode('search'));
@@ -310,7 +310,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   });
 
   test('search: deep history (>50 messages) is found and auto-jumped', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     const code = uniqueCode('deep');
@@ -346,7 +346,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   });
 
   test('search: realtime matching messages grow the counter without stealing the active result', async ({ page, context }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     const code = uniqueCode('rtsearch');
@@ -382,7 +382,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   });
 
   test('search screenshot: real app demo data (desktop-search.png)', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     await login(page, base, uniqueCode('shot'));
@@ -494,7 +494,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   });
 
   test('multi-select: checkbox mode, plate, confirm batch delete', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     await login(page, base, uniqueCode('multisel'));
@@ -527,7 +527,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   });
 
   test('scrolled up: new message shows the unread badge', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     const code = uniqueCode('badge');
@@ -603,7 +603,7 @@ test.describe('FileHelper v1.0 E2E', () => {
   });
 
   test('lock: returns to Enter Code, re-login restores history; About shows 1.0.0', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     const code = uniqueCode('lock');

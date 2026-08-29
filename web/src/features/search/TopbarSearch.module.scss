@@ -76,3 +76,96 @@
   font-size: 12px;
   color: var(--text-secondary);
 }
+
+// Floating results panel: hangs directly below the search pill, same
+// width, over the wallpaper. Never spans the whole chat pane.
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--tg-surface-floating-strong);
+  border-radius: 20px;
+  box-shadow: var(--tg-floating-shadow);
+  overflow: hidden;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.panelList {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 14px;
+  text-align: left;
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--hover-color);
+  }
+
+  &.rowActive {
+    background: rgba(var(--primary-color-rgb), 0.1);
+  }
+}
+
+.rowAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rowTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rowPreview {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowTime {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.panelStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}

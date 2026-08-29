@@ -3,8 +3,9 @@
   justify-content: flex-end;
   align-items: flex-start;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   padding: 0 8px;
+  position: relative;
   border-radius: 12px;
   transition: background var(--transition-fast);
 
@@ -22,6 +23,22 @@
   &.searchActive {
     background: rgba(var(--primary-color-rgb), 0.09);
     animation: searchActiveIn 0.25s ease-out;
+  }
+
+  // Telegram-style tiny tail at the top-right corner of outgoing
+  // bubbles: a small rotated square (diamond) peeking above the corner,
+  // matching the bubble color.
+  &.withTail::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: 6px;
+    width: 12px;
+    height: 12px;
+    background: var(--message-out-background);
+    transform: rotate(45deg);
+    pointer-events: none;
+    z-index: 0;
   }
 }
 
@@ -68,7 +85,7 @@
 .undecryptable {
   background: var(--surface-alt, var(--border-color));
   color: var(--text-secondary);
-  border-radius: 12px;
+  border-radius: var(--tg-bubble-radius);
   padding: 10px 14px;
   font-size: 14px;
   font-style: italic;

@@ -2,14 +2,21 @@
   display: flex;
   height: 100dvh;
   width: 100vw;
+  // Telegram Web K windowed shell: a few px of visual gutter around the
+  // whole app, with large rounded corners on the two panes.
+  padding: 8px;
   overflow: hidden;
+  background: var(--tg-frame-color);
 }
 
 .mobileLayout {
   height: 100dvh;
   width: 100vw;
-  overflow: hidden;
+  // clip (not hidden): an off-screen panel's focused textarea or
+  // scrollIntoView must never scroll this container and shift the shell.
+  overflow: clip;
   position: relative;
+  background: var(--tg-frame-color);
 }
 
 .mobilePanel {

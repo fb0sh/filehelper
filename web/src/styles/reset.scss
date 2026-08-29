@@ -11,6 +11,12 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  // clip (not hidden): the root must never scroll — not even
+  // programmatically, e.g. when an off-screen mobile panel's textarea
+  // receives focus or scrollIntoView is called. overflow:hidden would
+  // still accept programmatic scrolling and shift the whole shell.
+  overflow: clip;
+  height: 100%;
 }
 
 body {
@@ -18,8 +24,9 @@ body {
   font-size: var(--font-size-md);
   line-height: var(--line-height);
   color: var(--text-primary);
-  background: var(--surface-color);
-  overflow: hidden;
+  // Neutral "window frame" visible around the rounded app shell.
+  background: var(--tg-frame-color);
+  overflow: clip;
   height: 100dvh;
   width: 100vw;
 }

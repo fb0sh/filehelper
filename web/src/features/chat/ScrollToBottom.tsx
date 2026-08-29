@@ -16,7 +16,7 @@ export function ScrollToBottom({ visible, newMessageCount, onClick }: Props) {
       : 'Scroll to bottom';
 
   return (
-    <button className={styles.btn} onClick={onClick} aria-label={label}>
+    <button className={styles.btn} onClick={onClick} aria-label={label} data-tg="scroll-btn">
       <ChevronDown size={22} />
       {newMessageCount > 0 && (
         <span className={styles.badge}>

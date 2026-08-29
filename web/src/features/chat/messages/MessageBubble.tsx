@@ -132,6 +132,9 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
   };
 
   const isImage = message.attachment?.mime.startsWith('image/') ?? false;
+  // Telegram-style tiny tail on the top-right corner of outgoing bubbles.
+  // Images and undecryptable placeholders keep a clean corner instead.
+  const withTail = !isImage && !message.undecryptable;
   const menuItems = [];
   if (message.text) {
     menuItems.push({
@@ -201,7 +204,7 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
     <>
       <div
         ref={wrapperRef}
-        className={`${styles.wrapper} ${selectionMode ? styles.selectable : ''} ${selected ? styles.selected : ''} ${searchActive ? styles.searchActive : ''}`}
+        className={`${styles.wrapper} ${selectionMode ? styles.selectable : ''} ${selected ? styles.selected : ''} ${searchActive ? styles.searchActive : ''} ${withTail ? styles.withTail : ''}`}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         data-message-wrapper=""

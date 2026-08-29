@@ -2,14 +2,15 @@
   --primary-color: #3390ec;
   --primary-color-rgb: 51, 144, 236;
   --surface-color: #ffffff;
-  --surface-color-secondary: #f5f5f5;
+  --surface-color-secondary: #f5f6f7;
   --text-primary: #000000;
   --text-secondary: #707579;
   --text-tertiary: #a1aab3;
   --border-color: #e0e0e0;
   --border-color-light: #f0f0f0;
-  --chat-background: #e6ebee;
-  --message-out-background: #eeffde;
+  --chat-background: #d3e3cd;
+  --message-out-background: #e9fddf;
+  --message-in-background: #ffffff;
   --message-out-text: #000000;
   --message-out-meta: #4fae4e;
   --accent-color: #3390ec;
@@ -24,10 +25,40 @@
   --danger-color-rgb: 223, 63, 64;
   --success-color: #4fae4e;
   --overlay-background: rgba(0, 0, 0, 0.4);
-  --sidebar-width: 380px;
+
+  // ── Telegram Web K shell tokens ─────────────────────────────
+  --tg-sidebar-width: 440px;
+  --tg-content-width: 840px;
+  --tg-message-width: 800px;
+  --tg-chat-gutter: 16px;
+  --tg-shell-radius: 20px;
+  --tg-floating-radius: 28px;
+  --tg-bubble-radius: 14px;
+  --tg-bubble-radius-small: 6px;
+  --tg-composer-min-height: 56px;
+
+  --tg-frame-color: #d9dee4;
+  --tg-surface-floating: rgba(255, 255, 255, 0.97);
+  --tg-surface-floating-strong: rgba(255, 255, 255, 0.99);
+  --tg-floating-shadow:
+    0 1px 2px rgba(16, 35, 47, 0.14),
+    0 4px 12px rgba(16, 35, 47, 0.08);
+  --tg-bubble-shadow: 0 1px 1px rgba(16, 35, 47, 0.1);
+  --tg-search-bg: #f1f3f5;
+  --tg-date-bg: rgba(76, 152, 96, 0.88);
+
+  // Chat wallpaper: soft pale-green gradient + dense doodle tile.
+  --tg-wallpaper-grad-a: #e3efd6; // yellow-green (top-left)
+  --tg-wallpaper-grad-b: #d2e6d7; // mid green
+  --tg-wallpaper-grad-c: #bfdccf; // cyan-green (bottom-right)
+  --tg-wallpaper-image: url('/wallpaper.svg');
+  --tg-wallpaper-size: 512px;
+
+  // Legacy aliases (kept so nothing else in the app depends on old names).
+  --sidebar-width: 440px;
   --header-height: 56px;
   --composer-min-height: 54px;
-  --bubble-max-width: 480px;
+  --bubble-max-width: 560px;
   --bubble-radius: 16px;
   --bubble-radius-small: 8px;
   --transition-fast: 0.15s;
@@ -39,7 +70,6 @@
   --font-size-xl: 18px;
   --font-size-2xl: 22px;
   --line-height: 1.4;
-  --wallpaper-opacity: 0.06;
 }
 
 [data-theme="dark"] {
@@ -54,6 +84,7 @@
   --border-color-light: #333333;
   --chat-background: #0e1621;
   --message-out-background: #2b5278;
+  --message-in-background: #1b2837;
   --message-out-text: #ffffff;
   --message-out-meta: #70b5ec;
   --accent-color: #3390ec;
@@ -68,5 +99,21 @@
   --danger-color-rgb: 255, 89, 90;
   --success-color: #4fae4e;
   --overlay-background: rgba(0, 0, 0, 0.6);
-  --wallpaper-opacity: 0.04;
+
+  --tg-frame-color: #0c0f14;
+  --tg-surface-floating: rgba(35, 41, 54, 0.97);
+  --tg-surface-floating-strong: rgba(35, 41, 54, 0.99);
+  --tg-floating-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+  --tg-bubble-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --tg-search-bg: #1c2430;
+  --tg-date-bg: rgba(84, 150, 102, 0.72);
+
+  --tg-wallpaper-grad-a: #14202e;
+  --tg-wallpaper-grad-b: #101c26;
+  --tg-wallpaper-grad-c: #0d1f26;
+  --tg-wallpaper-image: url('/wallpaper-dark.svg');
+  --tg-wallpaper-size: 512px;
+
 }

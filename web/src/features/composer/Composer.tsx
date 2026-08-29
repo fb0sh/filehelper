@@ -80,8 +80,16 @@ export function Composer() {
   };
 
   return (
-    <div className={styles.composer}>
-      <div className={styles.inner}>
+    <div className={styles.composer} data-tg="composer">
+      <div className={styles.inner} data-tg="composer-pill">
+        <button
+          className={styles.iconBtn}
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Attach file"
+        >
+          <Paperclip size={22} />
+        </button>
+
         <div className={styles.inputWrapper}>
           <textarea
             ref={textareaRef}
@@ -94,14 +102,6 @@ export function Composer() {
             rows={1}
           />
         </div>
-
-        <button
-          className={styles.iconBtn}
-          onClick={() => fileInputRef.current?.click()}
-          aria-label="Attach file"
-        >
-          <Paperclip size={22} />
-        </button>
 
         <input
           ref={fileInputRef}
