@@ -4,6 +4,8 @@ import {
   decryptAttachmentTo,
   decryptAttachmentToBlob,
   downloadViaBlob,
+  downloadAttachment,
+  saveViaPicker,
 } from '../lib/fileTransfer';
 import { bytesToBase64url, hexToBytes } from '../lib/crypto/encoding';
 import { deriveFileKey, encryptChunkWithPrefix, cryptoRandomBytes } from '../lib/crypto/core';
@@ -92,6 +94,9 @@ describe('encrypted download pipeline', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+    delete (URL as { createObjectURL?: unknown }).createObjectURL;
+    delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL;
   });
 
   it('decrypts a multi-chunk file with correct plaintext + hash (constant chunks)', async () => {
@@ -168,6 +173,83 @@ describe('encrypted download pipeline', () => {
     att.size = 200 * 1024 * 1024; // > 128 MiB cap
     const outcome = await downloadViaBlob(att);
     expect(outcome.kind).toBe('unsupported-large');
+  });
+
+  it('saveViaPicker: "Save as…" streams decrypted bytes to the user-chosen file', async () => {
+    const plaintext = new TextEncoder().encode('save-as via native picker');
+    const sha256 = await sha256Hex(plaintext);
+    const att = makeAttachment(plaintext, sha256);
+    stubFetch(ciphertextFor(plaintext));
+
+    const writable = new FakeWritable();
+    const picker = vi.fn().mockResolvedValue({ createWritable: async () => writable });
+    const w = window as unknown as { showSaveFilePicker?: unknown };
+    w.showSaveFilePicker = picker;
+
+    const outcome = await saveViaPicker(att);
+    expect(outcome.kind).toBe('ok');
+    // The OS folder/file picker is opened with the attachment filename.
+    expect(picker).toHaveBeenCalledWith({ suggestedName: 'big-file.bin' });
+    expect(writable.closed).toBe(true);
+    const joined = new Uint8Array(writable.chunks.reduce((n, c) => n + c.length, 0));
+    let o = 0;
+    for (const c of writable.chunks) {
+      joined.set(c, o);
+      o += c.length;
+    }
+    expect(Array.from(joined)).toEqual(Array.from(plaintext));
+  });
+
+  it('saveViaPicker: cancelling the OS dialog is not an error', async () => {
+    const plaintext = new TextEncoder().encode('x');
+    const sha256 = await sha256Hex(plaintext);
+    const w = window as unknown as { showSaveFilePicker?: unknown };
+    w.showSaveFilePicker = vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError'));
+    const outcome = await saveViaPicker(makeAttachment(plaintext, sha256));
+    expect(outcome.kind).toBe('cancelled');
+  });
+
+  it('downloadAttachment routes: picker when available, blob download otherwise', async () => {
+    const plaintext = new TextEncoder().encode('route test');
+    const sha256 = await sha256Hex(plaintext);
+    const att = makeAttachment(plaintext, sha256);
+    const ciphertext = ciphertextFor(plaintext);
+
+    // One fetch spy; swap the resolved response per path.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const respFor = (body: Uint8Array) =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(c) {
+            c.enqueue(body);
+            c.close();
+          },
+        }),
+        { status: 200 }
+      ) as Response;
+
+    // Path A — picker present (secure context, e.g. localhost/HTTPS).
+    fetchSpy.mockResolvedValue(respFor(ciphertext));
+    const picker = vi.fn().mockResolvedValue({ createWritable: async () => new FakeWritable() });
+    (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = picker;
+    await downloadAttachment(att, { saveAs: true });
+    expect(picker).toHaveBeenCalled();
+
+    // Path B — no picker (LAN HTTP / other browsers): falls back to the
+    // standard download flow instead of failing.
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+    fetchSpy.mockResolvedValue(respFor(ciphertext));
+    // jsdom has no URL.createObjectURL — install it like a real browser.
+    const createUrl = vi.fn().mockReturnValue('blob:mock');
+    (URL as { createObjectURL?: unknown }).createObjectURL = createUrl as never;
+    (URL as { revokeObjectURL?: unknown }).revokeObjectURL = vi.fn() as never;
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+    const outcome = await downloadAttachment(att, { saveAs: true });
+    expect(outcome.kind).toBe('ok');
+    expect(clickSpy).toHaveBeenCalled();
+    expect(createUrl).toHaveBeenCalled();
   });
 });
 
