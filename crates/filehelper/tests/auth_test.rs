@@ -48,15 +48,17 @@ async fn fresh_run_creates_access_code() {
 }
 
 #[tokio::test]
-async fn second_run_restores_same_access_code() {
+async fn second_run_changes_access_code() {
     let dir = temp_dir("fh-restorecode");
     let cfg = app_config(dir.clone());
     let app1 = App::start(&cfg).await.unwrap();
     let code1 = app1.access_code.clone().unwrap();
     app1.shutdown().await;
 
+    // Default behavior: every start gets a fresh access code.
     let app2 = App::start(&cfg).await.unwrap();
-    assert_eq!(app2.access_code.clone().unwrap(), code1);
+    let code2 = app2.access_code.clone().unwrap();
+    assert_ne!(code1, code2, "restart must generate a new access code");
     app2.shutdown().await;
     cleanup(&dir);
 }
@@ -167,22 +169,30 @@ async fn login_rate_limit() {
 }
 
 #[tokio::test]
-async fn signed_cookie_works_after_restart() {
+async fn old_cookie_invalid_after_restart_new_code_works() {
     let dir = temp_dir("fh-cookierestart");
     let cfg = app_config(dir.clone());
     let app1 = App::start(&cfg).await.unwrap();
-    let code = app1.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app1, &code).await));
+    let code1 = app1.access_code.clone().unwrap();
+    let cookie = token(&cookie_from_response(&login(&app1, &code1).await));
     assert!(!cookie.is_empty());
     app1.shutdown().await;
 
+    // The signing key rotated with the code: old sessions are invalid.
     let app2 = App::start(&cfg).await.unwrap();
     let res = get(&app2, "/api/v1/auth/session", Some(&cookie)).await;
     assert_eq!(
         res.status(),
-        200,
-        "old cookie must stay valid after restart"
+        401,
+        "old cookie must be invalid after restart"
     );
+
+    // Logging in with the fresh code yields a working session.
+    let code2 = app2.access_code.clone().unwrap();
+    assert_ne!(code1, code2);
+    let new_cookie = token(&cookie_from_response(&login(&app2, &code2).await));
+    let res = get(&app2, "/api/v1/auth/session", Some(&new_cookie)).await;
+    assert_eq!(res.status(), 200);
     app2.shutdown().await;
     cleanup(&dir);
 }

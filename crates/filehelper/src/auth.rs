@@ -33,14 +33,17 @@ pub struct AuthBundle {
     pub runtime_code: Option<String>,
 }
 
-/// Load persisted auth, or create it on first run:
+/// Prepare auth for this run.
 ///
-/// - writes the access code + signing key to a 0600 secret file
-/// - stores only an Argon2id hash of the code in SQLite
+/// Default (no `runtime_code`): the access code is regenerated on every
+/// start — a fresh 6-digit code and a fresh session signing key — while
+/// all messages and files are kept. The secret file and the Argon2id
+/// hash in SQLite are updated to the new code, and old browser sessions
+/// become invalid because the signing key changed.
 ///
 /// A `runtime_code` (--password) skips all persistence and uses a fresh
 /// in-memory signing key, so nothing survives the process.
-pub async fn load_or_create_auth(
+pub async fn init_auth(
     data_dir: &Path,
     pool: &sqlx::SqlitePool,
     runtime_code: Option<&str>,
@@ -52,48 +55,19 @@ pub async fn load_or_create_auth(
             runtime_code: Some(code.to_string()),
         });
     }
-
-    let secret_path = data_dir.join(SECRET_FILE);
-    let (access_code, signing_key) = if secret_path.exists() {
-        let content = std::fs::read_to_string(&secret_path)?;
-        parse_secret_file(&content)?
-    } else {
-        let code = generate_access_code();
-        let key: [u8; 32] = rand::random();
-        write_secret_file(&secret_path, &code, &key)?;
-        (code, key)
-    };
-
-    let existing =
-        sqlx::query_scalar::<_, String>("SELECT value FROM meta WHERE key = 'access_code_hash'")
-            .fetch_optional(pool)
-            .await?;
-    if existing.is_none() {
-        let hash = password::hash_password(&access_code)?;
-        sqlx::query("INSERT INTO meta (key, value) VALUES ('access_code_hash', ?1)")
-            .bind(&hash)
-            .execute(pool)
-            .await?;
-    }
-
-    Ok(AuthBundle {
-        access_code: Some(access_code),
-        signing_key,
-        runtime_code: None,
-    })
+    rotate_or_create(data_dir, pool).await
 }
 
-/// Generate a new access code, rotate the signing key (invalidating all
-/// existing browser sessions), keep all messages and files.
-pub async fn reset_access_code(
+// Generate a fresh code + signing key, persist both, and update the hash.
+async fn rotate_or_create(
     data_dir: &Path,
     pool: &sqlx::SqlitePool,
 ) -> Result<AuthBundle, AppError> {
-    let code = generate_access_code();
+    let access_code = generate_access_code();
     let signing_key: [u8; 32] = rand::random();
-    write_secret_file(&data_dir.join(SECRET_FILE), &code, &signing_key)?;
+    write_secret_file(&data_dir.join(SECRET_FILE), &access_code, &signing_key)?;
 
-    let hash = password::hash_password(&code)?;
+    let hash = password::hash_password(&access_code)?;
     sqlx::query(
         "INSERT INTO meta (key, value) VALUES ('access_code_hash', ?1)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -103,10 +77,19 @@ pub async fn reset_access_code(
     .await?;
 
     Ok(AuthBundle {
-        access_code: Some(code),
+        access_code: Some(access_code),
         signing_key,
         runtime_code: None,
     })
+}
+
+/// Explicitly rotate the access code (same as a fresh start): new code,
+/// new signing key (old sessions invalid), messages and files kept.
+pub async fn reset_access_code(
+    data_dir: &Path,
+    pool: &sqlx::SqlitePool,
+) -> Result<AuthBundle, AppError> {
+    rotate_or_create(data_dir, pool).await
 }
 
 /// 6-digit access code from the OS CSPRNG (100000..=999999).
@@ -114,21 +97,6 @@ pub fn generate_access_code() -> String {
     let n: u32 = rand::random();
     let code = ACCESS_CODE_MIN + (n % (ACCESS_CODE_MAX - ACCESS_CODE_MIN + 1));
     format!("{code:06}")
-}
-
-fn parse_secret_file(content: &str) -> Result<(String, [u8; 32]), AppError> {
-    let mut lines = content.lines();
-    let code = lines.next().unwrap_or("").trim().to_string();
-    let key_hex = lines.next().unwrap_or("").trim().to_string();
-    if code.len() != 6 || key_hex.len() != 64 {
-        return Err(AppError::Internal(anyhow::anyhow!("Corrupt secret file")));
-    }
-    let mut key = [0u8; 32];
-    for i in 0..32 {
-        key[i] = u8::from_str_radix(&key_hex[i * 2..i * 2 + 2], 16)
-            .map_err(|_| AppError::Internal(anyhow::anyhow!("Corrupt secret file")))?;
-    }
-    Ok((code, key))
 }
 
 fn write_secret_file(path: &Path, code: &str, key: &[u8; 32]) -> Result<(), AppError> {

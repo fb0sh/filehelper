@@ -28,8 +28,8 @@ Access code:   483921
 Enter the access code in the browser and start sending text and files. The
 default data is kept in FileHelper's application data directory
 (`~/.local/share/filehelper`, `~/Library/Application Support/FileHelper`, or
-`%LOCALAPPDATA%\FileHelper`), so a restart continues where you left off — same
-access code, same messages, same files.
+`%LOCALAPPDATA%\FileHelper`), so a restart continues where you left off — your
+messages and files survive, and a fresh access code is generated each launch.
 
 ## Features
 
@@ -46,7 +46,7 @@ access code, same messages, same files.
 ## Modes
 
 ```bash
-# Default: comfortable mode — restores previous data and access code
+# Default: comfortable mode — restores previous data, fresh access code
 ./filehelper
 
 # One-shot mode — temp data, fresh access code, everything removed on exit
@@ -109,9 +109,10 @@ mise run build  # frontend build + release binary
   `/api/v1/auth/login` and `/api/v1/auth/session` are unauthenticated.
 - The access code is stored as an Argon2id hash; verification is
   constant-time. Login is rate-limited per IP (5 failures / minute).
-- Sessions are stateless HMAC-SHA256 signed cookies (HttpOnly, SameSite=Strict,
-  30-day TTL) — restarting keeps browsers signed in; `--reset-code` rotates
-  the signing key so all old sessions are invalidated.
+- A fresh access code is generated on every launch, and the session signing
+  key rotates with it, so old browser sessions are invalidated after a
+  restart. Sessions are stateless HMAC-SHA256 signed cookies (HttpOnly,
+  SameSite=Strict, 30-day TTL).
 - Files are stored under UUID names; original filenames (any Unicode) live only
   in the database, so path traversal is impossible.
 

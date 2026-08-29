@@ -198,7 +198,7 @@ test.describe('FileHelper E2E', () => {
   // -----------------------------------------------------------------
   // Spec 25: lifecycle tests (Test A / B / C)
   // -----------------------------------------------------------------
-  test('A: restart with same data dir keeps code, session, messages and files', async ({ page }) => {
+  test('A: restart changes code but keeps messages and files', async ({ page }) => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fh-e2e-a-'));
     const port = 19000 + Math.floor(Math.random() * 500);
     const base1 = `http://127.0.0.1:${port}`;
@@ -217,12 +217,16 @@ test.describe('FileHelper E2E', () => {
 
     await server1.stop();
 
-    // Restart the same data dir.
+    // Restart the same data dir: fresh access code, old session invalid.
     const server2 = await startServer({ dataDir, port });
-    expect(server2.accessCode).toBe(server1.accessCode);
+    expect(server2.accessCode).not.toBe(server1.accessCode);
 
-    // Old browser cookie stays valid: reload lands in the main UI.
     await page.reload();
+    await expect(page.locator('input[placeholder="Access code"]')).toBeVisible({ timeout: 10000 });
+
+    // The new code lets the user in; history and files are preserved.
+    await page.fill('input[placeholder="Access code"]', server2.accessCode!);
+    await page.click('button[type="submit"]');
     await expect(page.locator('textarea[placeholder="Message"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator(`text=${hello}`).first()).toBeVisible({ timeout: 5000 });
     await expect(page.locator(`text=${fileName}`).first()).toBeVisible({ timeout: 5000 });

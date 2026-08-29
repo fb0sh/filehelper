@@ -35,7 +35,7 @@ impl App {
                 .await
                 .map_err(|e| e.to_string())?
         } else {
-            crate::auth::load_or_create_auth(&data_dir, &pool, config.password.as_deref())
+            crate::auth::init_auth(&data_dir, &pool, config.password.as_deref())
                 .await
                 .map_err(|e| e.to_string())?
         };
