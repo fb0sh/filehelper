@@ -5,8 +5,9 @@ import {
 
 // The native "Save as" picker is only available in supporting browsers
 // (Chromium, secure contexts). FileHelper often runs over plain
-// http://192.168.x.x, so this must be detected at runtime — never show a
-// fake Save-as that falls back to a plain download.
+// http://192.168.x.x, so this is detected at runtime and the menu falls
+// back to the standard download flow when the picker is unavailable
+// (see downloadAttachment in fileTransfer.ts).
 export function supportsSaveAs(): boolean {
   return (
     typeof window !== 'undefined' &&

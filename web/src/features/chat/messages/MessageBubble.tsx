@@ -1,4 +1,4 @@
-import { useState, MouseEvent, useRef } from 'react';
+import { useState, MouseEvent, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { messagesApi, messageKeys } from '../../../api';
 import { TextMessage } from './TextMessage';
@@ -8,10 +8,10 @@ import { ContextMenu } from '../../../components/menu/ContextMenu';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { LargeDownloadModal } from '../../../components/LargeDownloadModal';
 import { downloadAttachment } from '../../../lib/fileTransfer';
-import { supportsSaveAs } from '../../../lib/saveAs';
 import { imagePreviewCache } from '../../../lib/imagePreviewCache';
 import { decryptedCache } from '../../../lib/decryptedCache';
 import { useSelectionStore } from '../../../stores/selection';
+import { closeOpenMenu, registerMenuClose } from '../../../lib/contextMenuBus';
 import {
   Check,
   Copy,
@@ -67,6 +67,8 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
       onToggleSelect();
       return;
     }
+    // At most one context menu open: close any other bubble's menu first.
+    closeOpenMenu();
     const sel = window.getSelection();
     let selectedText: string | undefined;
     if (sel && !sel.isCollapsed) {
@@ -110,11 +112,13 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
     });
   };
 
-  const canSaveAs = message.attachment !== null && supportsSaveAs();
-
+  // "Save as…" is always offered for attachments. With the native File
+  // System Access picker (Chromium, secure context) it saves to a chosen
+  // location; without it (LAN HTTP / other browsers) downloadAttachment
+  // falls back to the standard download flow.
   const handleSaveAs = () => {
     const att = message.attachment;
-    if (!att || !supportsSaveAs()) return;
+    if (!att) return;
     downloadAttachment(att, { saveAs: true }).then((outcome) => {
       if (outcome.kind === 'unsupported-large') {
         setLargeDownload({ filename: att.filename });
@@ -125,6 +129,13 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
   const handleDelete = () => {
     setConfirmDelete(true);
   };
+
+  // While this bubble's menu is open, it is the single active menu on the
+  // page; opening another menu closes it via the context-menu bus.
+  useEffect(() => {
+    if (!menu) return;
+    return registerMenuClose(() => setMenu(null));
+  }, [menu]);
 
   const confirmDeleteNow = () => {
     deleteMutation.mutate(message.id);
@@ -155,13 +166,11 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
       icon: <Download size={16} />,
       onClick: handleDownload,
     });
-    if (canSaveAs) {
-      menuItems.push({
-        label: 'Save as…',
-        icon: <Save size={16} />,
-        onClick: handleSaveAs,
-      });
-    }
+    menuItems.push({
+      label: 'Save as…',
+      icon: <Save size={16} />,
+      onClick: handleSaveAs,
+    });
   }
   if (!selectionMode) {
     menuItems.push({

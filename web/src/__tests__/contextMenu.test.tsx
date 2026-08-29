@@ -99,13 +99,12 @@ describe('MessageBubble context menu', () => {
     );
   });
 
-  it('Save as… only appears when showSaveFilePicker is supported', async () => {
+  it('Save as… is always offered for attachments (falls back to download without the picker)', async () => {
     const w = window as unknown as { showSaveFilePicker?: unknown };
     delete w.showSaveFilePicker;
     renderBubble(fileMsg);
     openMenu(screen.getByText('report.pdf'));
-    await screen.findByText('Download');
-    expect(screen.queryByText('Save as…')).toBeNull();
+    expect(await screen.findByText('Save as…')).toBeDefined();
 
     w.showSaveFilePicker = vi.fn();
     renderBubble(fileMsg);

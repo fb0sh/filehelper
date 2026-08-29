@@ -24,6 +24,10 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
+    // Left-click anywhere and Escape close the menu. (Right-clicking
+    // another bubble closes this menu via the context-menu bus in
+    // MessageBubble — the bus approach avoids native event-order
+    // subtleties and keeps at most one menu open at a time.)
     document.addEventListener('click', handleClick);
     document.addEventListener('keydown', handleEsc);
     return () => {

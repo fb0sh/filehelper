@@ -3,6 +3,20 @@
 All notable changes to FileHelper are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## 2.0.4 — 2026-08-30
+
+### Fixes
+
+- **Only one right-click context menu at a time.** Right-clicking a
+  second message previously opened a second menu on top of the first
+  (a secondary-button click never fires `click`, so the old menu never
+  closed). Opening a menu now closes any other via a shared close bus.
+- **"Save as…" is back for every browser.** It was hidden when the native
+  File System Access picker (`showSaveFilePicker`, Chromium + secure
+  context) was unavailable — which is always the case over LAN HTTP. The
+  menu item is now always shown for attachments and gracefully falls back
+  to the standard download flow without the picker.
+
 ## 2.0.3 — 2026-08-30
 
 ### Fixes

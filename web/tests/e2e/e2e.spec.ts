@@ -644,6 +644,50 @@ test.describe('FileHelper v2.0 E2E', () => {
     await server.stop();
   });
 
+  test('context menu: only one menu is ever open at a time', async ({ page }) => {
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    await login(page, base, uniqueCode('onemenu'));
+    await sendText(page, 'menu-one');
+    await sendText(page, 'menu-two');
+    await page.waitForTimeout(300);
+
+    // The context menu is portaled to <body> (the sidebar hamburger menu
+    // is not), so count only body-level menu roots. Synthetic contextmenu
+    // dispatches target the bubble directly (a real pointer right-click
+    // would be intercepted by the first menu, which is position:fixed).
+    const menus = page.locator('body > div[class*="menu"]');
+    const rightClick = (idx: number, cx: number, cy: number) =>
+      page.evaluate(({ idx, cx, cy }) => {
+        const wraps = document.querySelectorAll('[data-message-wrapper]');
+        const el = wraps[idx] as HTMLElement;
+        el.dispatchEvent(
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+            clientX: cx,
+            clientY: cy,
+          })
+        );
+      }, { idx, cx, cy });
+
+    // Right-click the first bubble → its menu opens.
+    await rightClick(0, 300, 160);
+    await expect(page.locator('div[class*="menu"] button', { hasText: 'Copy' }).first()).toBeVisible();
+    expect(await menus.count()).toBe(1);
+
+    // Right-click a second bubble → the first menu closes, no stacking.
+    await rightClick(1, 300, 240);
+    await page.waitForTimeout(200);
+    expect(await menus.count()).toBe(1);
+
+    // Left-click anywhere closes it.
+    await page.mouse.click(10, 10);
+    await page.waitForTimeout(200);
+    expect(await menus.count()).toBe(0);
+    await server.stop();
+  });
+
   test('multi-select: checkbox mode, plate, confirm batch delete', async ({ page }) => {
     await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
