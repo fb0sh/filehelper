@@ -13,7 +13,7 @@
 }
 
 .header {
-  height: 64px;
+  height: 60px;
   display: flex;
   align-items: center;
   padding: 8px 12px;
@@ -39,15 +39,19 @@
 
 .searchBar {
   flex: 1;
-  height: 48px;
+  height: 42px;
   background: var(--tg-search-bg);
-  border-radius: 24px;
+  border-radius: 21px;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 14px;
   gap: 10px;
   border: 1px solid transparent;
   transition: border-color var(--transition-fast), background var(--transition-fast);
+
+  &:hover {
+    background: var(--surface-color-secondary);
+  }
 
   &:focus-within {
     border-color: var(--primary-color);
@@ -65,7 +69,7 @@
   border: none;
   outline: none;
   background: none;
-  font-size: 15px;
+  font-size: 14.5px;
   color: var(--text-primary);
 
   &::placeholder {
@@ -73,16 +77,84 @@
   }
 }
 
+// Telegram-style filter chips (All / Personal / Unread) with count pills.
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover {
+    background: var(--hover-color);
+  }
+
+  &.chipActive {
+    background: var(--surface-color-secondary);
+    color: var(--text-primary);
+  }
+}
+
+.chipCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text-secondary);
+  background: var(--hover-color-secondary);
+
+  &.chipCountActive {
+    color: #fff;
+    background: var(--primary-color);
+  }
+}
+
 .chatList {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 0 12px;
+  padding: 4px 0 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.14) transparent;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.14);
+    border-radius: 2px;
+  }
 }
 
 .chatRow {
   display: flex;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 12px;
   margin: 2px 8px;
   gap: 12px;
   cursor: pointer;
@@ -115,11 +187,11 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .chatName {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -132,7 +204,7 @@
 }
 
 .chatPreview {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -182,7 +254,7 @@
 
 .menu {
   position: absolute;
-  top: 56px;
+  top: 52px;
   left: 12px;
   background: var(--menu-background);
   border-radius: 14px;

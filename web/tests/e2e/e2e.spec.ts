@@ -48,9 +48,26 @@ async function sendText(page: Page, text: string) {
 async function uploadFile(page: Page, file: { name: string; mimeType: string; buffer: Buffer }) {
   const before = await page.locator('div[data-message-id]').count();
   await page.locator('input[type="file"]').setInputFiles(file);
+  // Pre-send dialog (Telegram-style Send File/Photo) — confirm without caption.
+  await page.locator('button[aria-label="Send file"]').click();
   await page.locator('button[aria-label="Cancel"]').waitFor({ state: 'hidden', timeout: 20000 }).catch(() => {});
   // The message bubble replaces the upload task row (image bubbles do not
   // render the filename as text, so wait on the count instead).
+  await page
+    .waitForFunction(
+      (n) => document.querySelectorAll('div[data-message-id]').length > n,
+      before,
+      { timeout: 20000 }
+    );
+}
+
+/** Upload with a caption through the pre-send dialog. */
+async function uploadFileWithCaption(page: Page, file: { name: string; mimeType: string; buffer: Buffer }, caption: string) {
+  const before = await page.locator('div[data-message-id]').count();
+  await page.locator('input[type="file"]').setInputFiles(file);
+  await page.locator('textarea[aria-label="Add a caption"]').fill(caption);
+  await page.locator('button[aria-label="Send file"]').click();
+  await page.locator('button[aria-label="Cancel"]').waitFor({ state: 'hidden', timeout: 20000 }).catch(() => {});
   await page
     .waitForFunction(
       (n) => document.querySelectorAll('div[data-message-id]').length > n,
@@ -186,6 +203,91 @@ test.describe('FileHelper v1.0 E2E', () => {
     await img.click();
     await expect(page.locator('[data-viewer] img').first()).toBeVisible({ timeout: 5000 });
     await page.keyboard.press('Escape');
+    await server.stop();
+  });
+
+  test('caption: send file + caption, modal flow, search hits caption, delete works', async ({ page }) => {
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    await login(page, base, uniqueCode('cap'));
+    const stamp = Date.now();
+    const caption = `Quarterly report ${stamp}`;
+
+    // Selecting a file opens the Telegram-style pre-send dialog.
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'q1.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('pdf'),
+    });
+    await expect(page.locator('[role="dialog"]', { hasText: 'Send File' })).toBeVisible();
+    await page.locator('textarea[aria-label="Add a caption"]').fill(caption);
+    await page.waitForTimeout(300);
+    await shot(page, 'desktop-caption-modal.png');
+    await page.click('button[aria-label="Send file"]');
+
+    // The caption renders inside the file bubble below the card.
+    const card = page.locator('[data-file-card]', { hasText: 'q1.pdf' }).first();
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await expect(card.locator('[data-caption]')).toContainText(caption);
+    await expect(card.locator('img')).toHaveCount(0); // pdf stays a card
+
+    // Search finds the caption and auto-jumps with the term highlighted.
+    await page.click('button[aria-label="Search"]');
+    const input = page.locator('input[placeholder="Search messages..."]');
+    await input.fill('Quarterly');
+    await expect(page.locator('text=1 / 1').first()).toBeVisible({ timeout: 5000 });
+    const hit = page.locator('div[data-message-id][data-search-active="true"]', { hasText: caption }).first();
+    await expect(hit).toBeVisible();
+    await expect(hit.locator('mark', { hasText: 'Quarterly' }).first()).toBeVisible();
+    await page.click('button[aria-label="Close search"]');
+
+    // Delete the message (caption + attachment go together).
+    await card.click({ button: 'right' });
+    await page.locator('div[class*="menu"] button', { hasText: 'Delete' }).first().click();
+    await page.locator('button', { hasText: 'Delete' }).last().click();
+    await expect(page.locator(`text=${caption}`).first()).toHaveCount(0);
+    await server.stop();
+  });
+
+  test('caption: image caption syncs to a second tab and survives refresh', async ({ page, context }) => {
+    await page.setViewportSize({ width: 1584, height: 960 });
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    const code = uniqueCode('capimg');
+    await login(page, base, code);
+    const pageB = await context.newPage();
+    await login(pageB, base, code);
+
+    const caption = '照片说明 📷 请查收';
+    await uploadFileWithCaption(page, {
+      name: 'photo.png',
+      mimeType: 'image/png',
+      buffer: solidPng(320, 200, [51, 144, 236]),
+    }, caption);
+
+    // Both tabs render the image + caption (realtime sync, decrypted).
+    await expect(page.locator('[data-image-message] img').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-image-message] [data-caption]')).toContainText(caption);
+    await expect(pageB.locator('[data-image-message] img').first()).toBeVisible({ timeout: 15000 });
+    await expect(pageB.locator('[data-image-message] [data-caption]')).toContainText(caption);
+
+    // Refresh → history restores the caption (persisted in the envelope).
+    await page.reload();
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-image-message] img').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-image-message] [data-caption]')).toContainText(caption);
+    await server.stop();
+  });
+
+  test('caption: empty caption sends a plain file with no caption block', async ({ page }) => {
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    await login(page, base, uniqueCode('nocap'));
+    await uploadFile(page, { name: 'plain.bin', mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+
+    const card = page.locator('[data-file-card]', { hasText: 'plain.bin' }).first();
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await expect(card.locator('[data-caption]')).toHaveCount(0);
     await server.stop();
   });
 

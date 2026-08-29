@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useUploadStore } from '../stores/upload';
 
 export function useGlobalPaste() {
-  const addTasks = useUploadStore((s) => s.addTasks);
+  const setPending = useUploadStore((s) => s.setPending);
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -25,11 +25,12 @@ export function useGlobalPaste() {
 
       if (files.length > 0) {
         e.preventDefault();
-        addTasks(files);
+        // Route through the pre-send dialog so a caption can be added.
+        setPending(files);
       }
     };
 
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [addTasks]);
+  }, [setPending]);
 }

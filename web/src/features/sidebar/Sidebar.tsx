@@ -14,6 +14,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 export function Sidebar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | 'personal' | 'unread'>('all');
   const [lastDecrypted, setLastDecrypted] = useState<DecryptedMessage | null>(null);
   const setMobileChatOpen = useUIStore((s) => s.setMobileChatOpen);
   const openSettings = useUIStore((s) => s.openSettings);
@@ -48,6 +49,16 @@ export function Sidebar() {
 
   const trimmed = searchQuery.trim().toLowerCase();
   const chatVisible = trimmed === '' || 'filehelper'.includes(trimmed);
+  // Telegram-style filter chips: All / Personal / Unread. The single chat
+  // is a personal space, so Personal matches All; Unread stays empty (no
+  // unread tracking exists) and shows the empty state honestly.
+  const chatCount = chatVisible ? 1 : 0;
+  const showChat = chatVisible && filter !== 'unread';
+  const chips: { key: 'all' | 'personal' | 'unread'; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: chatCount },
+    { key: 'personal', label: 'Personal', count: chatCount },
+    { key: 'unread', label: 'Unread', count: 0 },
+  ];
 
   const preview =
     lastDecrypted?.text ??
@@ -77,8 +88,27 @@ export function Sidebar() {
         </div>
       </div>
 
+      <div className={styles.chips} role="tablist" aria-label="Chat filters">
+        {chips.map((chip) => (
+          <button
+            key={chip.key}
+            role="tab"
+            aria-selected={filter === chip.key}
+            className={`${styles.chip} ${filter === chip.key ? styles.chipActive : ''}`}
+            onClick={() => setFilter(chip.key)}
+          >
+            {chip.label}
+            {chip.count > 0 && (
+              <span className={`${styles.chipCount} ${filter === chip.key ? styles.chipCountActive : ''}`}>
+                {chip.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       <div className={styles.chatList}>
-        {chatVisible ? (
+        {showChat ? (
           <div
             className={`${styles.chatRow} ${styles.selected}`}
             onClick={() => { if (isMobile) setMobileChatOpen(true); }}

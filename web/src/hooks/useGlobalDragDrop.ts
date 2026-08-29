@@ -3,7 +3,7 @@ import { useUploadStore } from '../stores/upload';
 
 export function useGlobalDragDrop() {
   const [dragOver, setDragOver] = useState(false);
-  const addTasks = useUploadStore((s) => s.addTasks);
+  const setPending = useUploadStore((s) => s.setPending);
   const dragCounter = useRef(0);
 
   useEffect(() => {
@@ -38,7 +38,8 @@ export function useGlobalDragDrop() {
       setDragOver(false);
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
-        addTasks(Array.from(files));
+        // Route through the pre-send dialog so a caption can be added.
+        setPending(Array.from(files));
       }
     };
 
@@ -53,7 +54,7 @@ export function useGlobalDragDrop() {
       document.removeEventListener('dragover', handleDragOver);
       document.removeEventListener('drop', handleDrop);
     };
-  }, [addTasks]);
+  }, [setPending]);
 
   return dragOver;
 }

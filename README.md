@@ -59,17 +59,25 @@ encrypted messages and files.
 
 ## Features
 
-- Telegram-like Web UI (desktop double column + mobile single column, light & dark)
+- Telegram Web K-style UI: desktop double column with a floating chat
+  header and composer over a patterned wallpaper, mobile single column,
+  light & dark themes
 - End-to-end encrypted text and file transfer
 - Your code is derived in the browser (Scrypt) into separate keys for auth,
   messages and files; the server stores **ciphertext only**
 - Per-space isolation: different codes are invisible to each other
 - Real-time sync across browsers via WebSocket (space-scoped)
+- **Attachments with captions**: pick a file or photo, add a caption in the
+  Telegram-style Send File / Send Photo dialog, and send — the caption is
+  encrypted with the message, survives refresh, syncs to other devices, and
+  is fully searchable
 - Client-side search over decrypted history, with automatic jump to the
   newest match, persistent active-result emphasis, and per-term highlight
-  in both message text and filenames
+  in message text, captions and filenames
 - Image preview after client-side decryption + magic-header validation
 - Videos, audio and other files are download-only file cards
+- Telegram-style sidebar: filter chips (All / Personal / Unread), rounded
+  search field, and a blue rounded active-chat highlight
 - Telegram-style multi-select, selection plate, and delete confirmation
 - SQLite persistence; files stored under random UUID names
 - Single binary, no runtime dependencies
@@ -83,15 +91,20 @@ encrypted messages and files.
 | ![Main](docs/screenshots/desktop-main.png) | ![Search](docs/screenshots/desktop-search.png) |
 
 Search runs entirely client-side over decrypted history and jumps directly
-to the highlighted match — no extra click needed.
+to the highlighted match — no extra click needed. Captions and filenames
+are searched exactly like message text.
 
 | Image preview | Video (file card only) |
 | --- | --- |
 | ![Image preview](docs/screenshots/desktop-image-preview.png) | ![Video](docs/screenshots/desktop-video-file.png) |
 
-| Multi-select | Delete confirmation |
+| Send File with caption | Multi-select |
 | --- | --- |
-| ![Selection mode](docs/screenshots/desktop-selection-mode.png) | ![Selection confirm](docs/screenshots/desktop-selection-confirm.png) |
+| ![Caption modal](docs/screenshots/desktop-caption-modal.png) | ![Selection mode](docs/screenshots/desktop-selection-mode.png) |
+
+| Delete confirmation |
+| --- |
+| ![Selection confirm](docs/screenshots/desktop-selection-confirm.png) |
 
 ### Mobile
 

@@ -1,6 +1,7 @@
 import { Sidebar } from './sidebar/Sidebar';
 import { Chat } from './chat/Chat';
 import { SettingsPanel } from './settings/SettingsPanel';
+import { AttachmentComposerModal } from './attachment/AttachmentComposerModal';
 import { useUIStore } from '../stores/ui';
 import { useRealtimeStore } from '../stores/realtime';
 import { useEffect } from 'react';
@@ -91,6 +92,7 @@ export function MainLayout() {
             <Chat />
           </div>
         </div>
+        <AttachmentComposerModal />
         {settings}
       </>
     );
@@ -103,6 +105,7 @@ export function MainLayout() {
         <Sidebar />
         <Chat />
       </div>
+      <AttachmentComposerModal />
       {settings}
     </>
   );

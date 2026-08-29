@@ -128,6 +128,15 @@ export function ImageMessage({ message, onDownload, searchQuery }: Props) {
             <span className={styles.check}>✓</span>
           </div>
         </div>
+        {message.text && (
+          <div className={styles.caption} data-caption="">
+            {searchQuery ? (
+              <SearchHighlightedText text={message.text} query={searchQuery} />
+            ) : (
+              message.text
+            )}
+          </div>
+        )}
       </div>
       {viewerOpen && preview.state === 'ready' && (
         <MediaViewer

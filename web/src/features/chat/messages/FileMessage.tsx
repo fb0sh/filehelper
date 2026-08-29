@@ -32,38 +32,49 @@ export function FileMessage({ message, onDownload, searchQuery }: Props) {
 
   return (
     <div className={styles.bubble} onClick={handleClick} data-file-card="">
-      <div className={styles.icon} style={{ background: color }}>
-        {isVideo ? <Film size={20} className={styles.iconGlyph} /> : isAudio ? <Music size={20} className={styles.iconGlyph} /> : (
-          <span className={styles.iconLabel}>{label}</span>
-        )}
-      </div>
-      <div className={styles.info}>
-        <div className={styles.filename}>
-          {searchQuery ? (
-            <SearchHighlightedText text={att.filename} query={searchQuery} />
-          ) : (
-            att.filename
+      <div className={styles.row}>
+        <div className={styles.icon} style={{ background: color }}>
+          {isVideo ? <Film size={20} className={styles.iconGlyph} /> : isAudio ? <Music size={20} className={styles.iconGlyph} /> : (
+            <span className={styles.iconLabel}>{label}</span>
           )}
         </div>
-        <div className={styles.size}>
-          {formatBytes(att.size)}
-          {isVideo && <span className={styles.kindTag}>video</span>}
+        <div className={styles.info}>
+          <div className={styles.filename}>
+            {searchQuery ? (
+              <SearchHighlightedText text={att.filename} query={searchQuery} />
+            ) : (
+              att.filename
+            )}
+          </div>
+          <div className={styles.size}>
+            {formatBytes(att.size)}
+            {isVideo && <span className={styles.kindTag}>video</span>}
+          </div>
+        </div>
+        <div className={styles.actions}>
+          <button
+            className={styles.downloadBtn}
+            onClick={handleClick}
+            data-download-button=""
+            aria-label="Download"
+          >
+            <Download size={18} />
+          </button>
+          <div className={styles.meta}>
+            <span className={styles.time}>{formatMessageTime(message.createdAt)}</span>
+            <span className={styles.check}>✓</span>
+          </div>
         </div>
       </div>
-      <div className={styles.actions}>
-        <button
-          className={styles.downloadBtn}
-          onClick={handleClick}
-          data-download-button=""
-          aria-label="Download"
-        >
-          <Download size={18} />
-        </button>
-        <div className={styles.meta}>
-          <span className={styles.time}>{formatMessageTime(message.createdAt)}</span>
-          <span className={styles.check}>✓</span>
+      {message.text && (
+        <div className={styles.caption} data-caption="">
+          {searchQuery ? (
+            <SearchHighlightedText text={message.text} query={searchQuery} />
+          ) : (
+            message.text
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

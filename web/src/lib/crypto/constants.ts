@@ -51,6 +51,7 @@ export function fileChunkAad(
 
 // Limits.
 export const MAX_MESSAGE_TEXT = 64 * 1024; // 64 KiB plaintext text
+export const MAX_CAPTION_LEN = 4096; // attachment caption (Telegram uses 1024; be generous)
 export const MAX_FILENAME_LEN = 255;
 export const IMAGE_PREVIEW_MAX_BYTES = 64 * 1024 * 1024; // 64 MiB
 export const BLOB_DOWNLOAD_MAX_BYTES = 128 * 1024 * 1024; // 128 MiB

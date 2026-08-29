@@ -39,6 +39,8 @@ async function sendText(page: Page, text: string) {
 async function uploadFile(page: Page, file: { name: string; mimeType: string; buffer: Buffer }) {
   const before = await page.locator('div[data-message-id]').count();
   await page.locator('input[type="file"]').setInputFiles(file);
+  // Pre-send dialog (Telegram-style Send File/Photo) — confirm without caption.
+  await page.locator('button[aria-label="Send file"]').click();
   await page.locator('button[aria-label="Cancel"]').waitFor({ state: 'hidden', timeout: 20000 }).catch(() => {});
   await page.waitForFunction(
     (n) => document.querySelectorAll('div[data-message-id]').length > n,
@@ -250,8 +252,10 @@ test.describe('TG pixel-match geometry', () => {
     const wpA = pixelAt(img, Math.round(ch.x + ch.width - 60), 300); // far right
     const wpB = pixelAt(img, Math.round(r.x + r.width + 30), 400);
     for (const p of [wpA, wpB]) {
-      expect(p[2] + 8).toBeGreaterThanOrEqual(p[0]); // blue-ish green family
-      expect(p[0]).toBeLessThan(245); // not white surface
+      // Telegram Web A olive base #bdcd8c ≈ rgb(189, 205, 140)
+      expect(p[1]).toBeGreaterThan(p[0]); // g > r (green-ish)
+      expect(p[0]).toBeGreaterThan(p[2]); // r > b (yellow-green, not mint/blue)
+      expect(p[0]).toBeLessThan(245); // not a white surface
     }
     // the pills float OVER the wallpaper: wallpaper pixels directly above
     // the header and below the composer (no white strips, no borders)
@@ -259,31 +263,40 @@ test.describe('TG pixel-match geometry', () => {
     const belowComposer = pixelAt(img, Math.round(c.x + c.width / 2), Math.round(c.y + c.height + 10));
     for (const p of [aboveHeader, belowComposer]) {
       expect(p[0]).toBeLessThan(245); // not a white full-width surface
-      expect(p[2] + 8).toBeGreaterThanOrEqual(p[0]); // greenish wallpaper family
+      expect(p[1]).toBeGreaterThan(p[0]); // green-ish wallpaper family
+      expect(p[0]).toBeGreaterThan(p[2]);
     }
-    // gradient: top-left lighter than bottom-right
+    // base is a solid color: two distant points share the olive family
     const tl = pixelAt(img, Math.round(ch.x + 12), Math.round(ch.y + 12));
     const br = pixelAt(img, Math.round(ch.x + ch.width - 12), Math.round(ch.y + ch.height - 12));
-    expect(tl[0] + tl[1] + tl[2]).toBeGreaterThan(br[0] + br[1] + br[2]);
+    expect(Math.abs(tl[0] - br[0])).toBeLessThanOrEqual(10);
+    expect(Math.abs(tl[1] - br[1])).toBeLessThanOrEqual(10);
 
-    // ── Doodles render over the gradient (bright thin strokes) ──
-    let bright = 0;
+    // ── Doodles render over the base (darker olive strokes) ──
+    // stroke #77854b @ 0.375 over #bdcd8c ≈ rgb(163, 178, 116), clearly
+    // darker than the plain base (189, 205, 140).
+    let dark = 0;
     for (let y = 120; y < 800; y += 1) {
       for (let x = Math.round(r.x + r.width + 10); x < ch.x + ch.width - 4; x += 1) {
         const [rr, gg, bb] = pixelAt(img, x, y);
-        // white stroke @ 0.58 over the pale-green gradient ≈ (236, 245, 238)
-        if (rr > 224 && gg > 234 && bb > 226) bright++;
+        if (rr + gg + bb < 189 + 205 + 140 - 40) dark++;
       }
     }
-    expect(bright).toBeGreaterThan(150);
+    expect(dark).toBeGreaterThan(150);
 
-    // ── Wallpaper is anchored to the chat pane: background-attachment-free,
-    //    and the .chat background-image actually lists the doodle tile. ──
-    const bgImage = await page
+    // ── Wallpaper layering: solid base on .chat, doodle tile on ::before ──
+    const bgColor = await page
       .locator('[data-tg="chat"]')
-      .evaluate((el) => getComputedStyle(el).backgroundImage);
-    expect(bgImage).toContain('wallpaper.svg');
-    expect(bgImage).toContain('linear-gradient');
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bgColor).toBe('rgb(189, 205, 140)'); // #bdcd8c
+    const tile = await page
+      .locator('[data-tg="chat"]')
+      .evaluate((el) => getComputedStyle(el, '::before').backgroundImage);
+    expect(tile).toContain('wallpaper.svg');
+    const tileOpacity = await page
+      .locator('[data-tg="chat"]')
+      .evaluate((el) => getComputedStyle(el, '::before').opacity);
+    expect(parseFloat(tileOpacity)).toBeCloseTo(0.375, 3);
 
     // ── Scroll-to-bottom button anchored to the composer rail ──
     // The list is too short to scroll yet — seed filler history via the
@@ -421,21 +434,25 @@ test.describe('TG pixel-match geometry', () => {
       ctx.drawImage(img, 0, 0);
       const d = ctx.getImageData(0, 0, 512, 512).data;
       let ink = 0;
-      let white = 0;
+      let olive = 0;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] > 0) {
           ink++;
-          if (d[i] > 230 && d[i + 1] > 230 && d[i + 2] > 230) white++;
+          // strokes are olive: stroke #77854b ≈ rgb(119, 133, 75)
+          const r = d[i];
+          const g = d[i + 1];
+          const b = d[i + 2];
+          if (g > r && r > b && r > 90) olive++;
         }
       }
       const svg = await (await fetch('/wallpaper.svg')).text();
       const doodleCount = (svg.match(/<g transform=/g) || []).length;
-      return { ink, white, doodleCount, width: 512, height: 512 };
+      return { ink, olive, doodleCount, width: 512, height: 512 };
     });
 
     expect(stats.doodleCount).toBeGreaterThanOrEqual(40); // rich pattern
     expect(stats.ink).toBeGreaterThan(4000); // strokes actually drawn
-    expect(stats.white).toBeGreaterThan(2000); // low-contrast white lines
+    expect(stats.olive).toBeGreaterThan(2000); // olive line art, not white
     expect(stats.width).toBe(512);
     expect(stats.height).toBe(512);
     await server.stop();
@@ -482,6 +499,19 @@ test.describe('TG pixel-match geometry', () => {
     // no legacy 3px left indicator: the ::before box must be empty/auto
     expect(rowStyle.beforeW === 'auto' || parseFloat(rowStyle.beforeW) === 0).toBe(true);
 
+    // ── Filter chips (All / Personal / Unread) with count pills ──
+    const chips = page.locator('[role="tab"]');
+    await expect(chips).toHaveCount(3);
+    await expect(chips.nth(0)).toHaveText(/All/);
+    await expect(chips.nth(1)).toHaveText(/Personal/);
+    await expect(chips.nth(2)).toHaveText(/Unread/);
+    await expect(chips.nth(0)).toHaveAttribute('aria-selected', 'true');
+    // Unread filter (no unread tracking) honestly shows the empty state.
+    await chips.nth(2).click();
+    await expect(page.locator('text=No chats found').first()).toBeVisible();
+    await chips.nth(0).click();
+    await expect(page.locator('div[class*="chatRow"]').first()).toBeVisible();
+
     // ── Search: floating pill + results panel directly below, same width ──
     await page.click('button[aria-label="Search"]');
     const input = page.locator('input[placeholder="Search messages..."]');
@@ -500,17 +530,25 @@ test.describe('TG pixel-match geometry', () => {
     expect(panel!.x).toBeGreaterThan(ch!.x);
     expect(panel!.x + panel!.width).toBeLessThan(ch!.x + ch!.width);
 
-    // ── Dark mode: dark floating surfaces + dark doodle tile ──
+    // ── Dark mode: dark floating surfaces + dark base + shared doodle tile ──
     await page.click('button[aria-label="Close search"]');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     await page.waitForTimeout(200);
     const dark = await page.evaluate(() => {
-      const s = getComputedStyle(document.querySelector('[data-tg="chat-header"]')!);
+      const hdr = getComputedStyle(document.querySelector('[data-tg="chat-header"]')!);
       const ch = getComputedStyle(document.querySelector('[data-tg="chat"]')!);
-      return { headerBg: s.backgroundColor, bgImage: ch.backgroundImage.slice(0, 200) };
+      const before = getComputedStyle(document.querySelector('[data-tg="chat"]')!, '::before');
+      return {
+        headerBg: hdr.backgroundColor,
+        base: ch.backgroundColor,
+        tile: before.backgroundImage.slice(0, 200),
+        opacity: before.opacity,
+      };
     });
     expect(dark.headerBg).toBe('rgba(35, 41, 54, 0.97)');
-    expect(dark.bgImage).toContain('wallpaper-dark.svg');
+    expect(dark.base).toBe('rgb(14, 22, 33)'); // #0e1621
+    expect(dark.tile).toContain('wallpaper.svg');
+    expect(parseFloat(dark.opacity)).toBeCloseTo(0.18, 3);
 
     await server.stop();
   });

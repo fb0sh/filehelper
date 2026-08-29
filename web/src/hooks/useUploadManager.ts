@@ -146,6 +146,7 @@ async function uploadOne(taskId: string): Promise<string> {
       chunkSize: FILE_CHUNK_SIZE,
       noncePrefix,
       chunkCount: index,
+      caption: task.caption?.trim() || undefined,
     },
   });
 

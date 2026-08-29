@@ -13,12 +13,17 @@ export interface UploadTask {
   attachmentId?: string;
   abortController?: AbortController;
   messageId?: string;
+  /** Optional attachment caption, sent with the file message. */
+  caption?: string;
 }
 
 interface UploadState {
   tasks: UploadTask[];
   maxConcurrent: number;
-  addTasks: (files: File[]) => void;
+  /** Files waiting in the pre-send dialog (AttachmentComposerModal). */
+  pending: File[] | null;
+  addTasks: (files: File[], caption?: string) => void;
+  setPending: (files: File[] | null) => void;
   updateTask: (id: string, update: Partial<UploadTask>) => void;
   removeTask: (id: string) => void;
   cancelTask: (id: string) => void;
@@ -32,8 +37,9 @@ interface UploadState {
 export const useUploadStore = create<UploadState>((set, get) => ({
   tasks: [],
   maxConcurrent: 2,
+  pending: null,
 
-  addTasks: (files) => {
+  addTasks: (files, caption) => {
     const newTasks: UploadTask[] = files.map((file) => ({
       id: `tmp:${crypto.randomUUID()}`,
       file,
@@ -42,10 +48,13 @@ export const useUploadStore = create<UploadState>((set, get) => ({
       loaded: 0,
       total: file.size,
       speed: 0,
+      caption,
     }));
     set((s) => ({ tasks: [...s.tasks, ...newTasks] }));
     setTimeout(() => get().processQueue(), 0);
   },
+
+  setPending: (files) => set({ pending: files }),
 
   updateTask: (id, update) =>
     set((s) => ({

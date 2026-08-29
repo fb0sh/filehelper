@@ -5,6 +5,7 @@
 import {
   CRYPTO_VERSION,
   FILE_CHUNK_SIZE,
+  MAX_CAPTION_LEN,
   MAX_FILENAME_LEN,
   MAX_MESSAGE_TEXT,
   MESSAGE_NONCE_LEN,
@@ -26,6 +27,7 @@ export interface DecryptedAttachment {
 export interface DecryptedMessage {
   id: string;
   type: 'text' | 'file';
+  /** Text for text messages; the attachment caption for file messages. */
   text?: string;
   createdAt: string; // ISO
   attachment?: DecryptedAttachment;
@@ -56,6 +58,7 @@ export function encryptMessagePayload(
     chunkSize: message.file.chunkSize,
     noncePrefix: message.file.noncePrefix,
     chunkCount: message.file.chunkCount,
+    ...(message.file.caption ? { caption: message.file.caption } : {}),
   });
 }
 
@@ -68,6 +71,8 @@ export interface FilePlaintext {
   chunkSize: number;
   noncePrefix: string;
   chunkCount: number;
+  /** Optional attachment caption, encrypted inside the message envelope. */
+  caption?: string;
 }
 
 export type DecryptOutcome =
@@ -112,6 +117,7 @@ export function decryptEncryptedMessage(
       noncePrefix: v.value.noncePrefix,
       downloadUrl: record.attachment?.downloadUrl ?? '',
     };
+    if (v.value.caption) base.text = v.value.caption;
   }
   return { ok: true, message: base };
 }
@@ -128,6 +134,7 @@ type ValidatedMessage =
       chunkSize: number;
       noncePrefix: string;
       chunkCount: number;
+      caption?: string;
     };
 
 /** Strict schema check of the decrypted plaintext (spec: malicious
@@ -159,6 +166,11 @@ export function validateMessageSchema(value: unknown): { ok: true; value: Valida
       return { ok: false, reason: 'noncePrefix invalid' };
     const chunkCount = Number(v.chunkCount);
     if (!Number.isSafeInteger(chunkCount) || chunkCount < 1) return { ok: false, reason: 'chunkCount invalid' };
+    // Optional caption: must be a bounded string when present.
+    if (v.caption !== undefined) {
+      if (typeof v.caption !== 'string') return { ok: false, reason: 'caption: not a string' };
+      if (v.caption.length > MAX_CAPTION_LEN) return { ok: false, reason: 'caption: too long' };
+    }
     return {
       ok: true,
       value: {
@@ -171,6 +183,7 @@ export function validateMessageSchema(value: unknown): { ok: true; value: Valida
         chunkSize: v.chunkSize,
         noncePrefix: v.noncePrefix,
         chunkCount,
+        ...(typeof v.caption === 'string' ? { caption: v.caption } : {}),
       },
     };
   }

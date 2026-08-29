@@ -6,14 +6,30 @@
   box-shadow: var(--tg-bubble-shadow);
   padding: 9px 12px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   cursor: pointer;
   transition: filter var(--transition-fast);
 
   &:hover {
     filter: brightness(0.97);
   }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+// Attachment caption: sits below the file card inside the bubble.
+.caption {
+  font-size: 15px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  padding: 2px 2px 0;
 }
 
 .icon {

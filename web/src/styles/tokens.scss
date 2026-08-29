@@ -8,7 +8,7 @@
   --text-tertiary: #a1aab3;
   --border-color: #e0e0e0;
   --border-color-light: #f0f0f0;
-  --chat-background: #d3e3cd;
+  --chat-background: #bdcd8c;
   --message-out-background: #e9fddf;
   --message-in-background: #ffffff;
   --message-out-text: #000000;
@@ -47,12 +47,13 @@
   --tg-search-bg: #f1f3f5;
   --tg-date-bg: rgba(76, 152, 96, 0.88);
 
-  // Chat wallpaper: soft pale-green gradient + dense doodle tile.
-  --tg-wallpaper-grad-a: #e3efd6; // yellow-green (top-left)
-  --tg-wallpaper-grad-b: #d2e6d7; // mid green
-  --tg-wallpaper-grad-c: #bfdccf; // cyan-green (bottom-right)
+  // Chat wallpaper — Telegram Web A reference values: base #bdcd8c
+  // (solid theme background), pattern stroke #77854b (olive line art),
+  // tile-layer opacity 0.375 (pattern intensity).
+  --tg-wallpaper-base: #bdcd8c;
   --tg-wallpaper-image: url('/wallpaper.svg');
   --tg-wallpaper-size: 512px;
+  --tg-wallpaper-opacity: 0.375;
 
   // Legacy aliases (kept so nothing else in the app depends on old names).
   --sidebar-width: 440px;
@@ -110,10 +111,8 @@
   --tg-search-bg: #1c2430;
   --tg-date-bg: rgba(84, 150, 102, 0.72);
 
-  --tg-wallpaper-grad-a: #14202e;
-  --tg-wallpaper-grad-b: #101c26;
-  --tg-wallpaper-grad-c: #0d1f26;
-  --tg-wallpaper-image: url('/wallpaper-dark.svg');
+  --tg-wallpaper-base: #0e1621;
+  --tg-wallpaper-image: url('/wallpaper.svg');
   --tg-wallpaper-size: 512px;
-
+  --tg-wallpaper-opacity: 0.18;
 }

@@ -12,7 +12,7 @@ export function Composer() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
-  const addTasks = useUploadStore((s) => s.addTasks);
+  const setPending = useUploadStore((s) => s.setPending);
 
   const sendMutation = useMutation({
     mutationFn: async (plaintext: string) => {
@@ -67,14 +67,15 @@ export function Composer() {
     }
     if (files.length > 0) {
       e.preventDefault();
-      addTasks(files);
+      // Route through the pre-send dialog so a caption can be added.
+      setPending(files);
     }
   };
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      addTasks(Array.from(files));
+      setPending(Array.from(files));
     }
     e.target.value = '';
   };

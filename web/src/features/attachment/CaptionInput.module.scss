@@ -1,0 +1,31 @@
+.inputWrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+}
+
+.input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: var(--surface-color-secondary);
+  border-radius: 20px;
+  padding: 10px 14px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  resize: none;
+  max-height: 120px;
+  font-family: var(--font-family);
+  transition: background var(--transition-fast);
+
+  &:focus {
+    background: var(--surface-color);
+    box-shadow: 0 0 0 1.5px var(--primary-color) inset;
+  }
+
+  &::placeholder {
+    color: var(--text-tertiary);
+  }
+}
