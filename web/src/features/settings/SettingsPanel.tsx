@@ -1,32 +1,33 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { messagesApi, messageKeys } from '../../api';
 import { useUIStore } from '../../stores/ui';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { decryptedCache } from '../../lib/decryptedCache';
+import { imagePreviewCache } from '../../lib/imagePreviewCache';
 import { X, Monitor, Sun, Moon } from 'lucide-react';
 import { formatBytes } from '../../lib/bytes';
 import styles from './SettingsPanel.module.scss';
-
-const API = '/api/v1';
 
 export function SettingsPanel() {
   const section = useUIStore((s) => s.settingsSection);
   const closeSettings = useUIStore((s) => s.closeSettings);
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [cleared, setCleared] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: storage } = useQuery({
     queryKey: ['storage'],
-    queryFn: async () => {
-      const res = await fetch(`${API}/storage`);
-      return res.json();
-    },
+    queryFn: () => messagesApi.storage(),
   });
 
   const { data: info } = useQuery({
     queryKey: ['info'],
     queryFn: async () => {
-      const res = await fetch(`${API}/info`);
+      const res = await fetch('/api/v1/info');
       return res.json();
     },
   });
@@ -40,16 +41,17 @@ export function SettingsPanel() {
   }, [closeSettings]);
 
   const handleClearAll = async () => {
-    if (!window.confirm('Delete all messages and files? This cannot be undone.')) return;
     setClearing(true);
     try {
-      await fetch(`${API}/clear`, {
-        method: 'POST',
-        headers: { 'X-FileHelper-Request': '1' },
-      });
+      await messagesApi.clearAll();
+      decryptedCache.clear();
+      imagePreviewCache.clear();
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
+      queryClient.invalidateQueries({ queryKey: messageKeys.latest });
       setCleared(true);
     } finally {
       setClearing(false);
+      setConfirmClear(false);
     }
   };
 
@@ -90,28 +92,24 @@ export function SettingsPanel() {
           {section === 'storage' && (
             <div className={styles.section}>
               <div className={styles.statRow}>
+                <span>Encrypted storage</span>
+                <span>{formatBytes(storage?.ciphertextBytes ?? 0)}</span>
+              </div>
+              <div className={styles.statRow}>
+                <span>Messages</span>
+                <span>{storage?.messageCount ?? 0}</span>
+              </div>
+              <div className={styles.statRow}>
                 <span>Files</span>
-                <span>{formatBytes(storage?.files ?? 0)}</span>
+                <span>{storage?.fileCount ?? 0}</span>
               </div>
-              <div className={styles.statRow}>
-                <span>Images</span>
-                <span>{formatBytes(storage?.images ?? 0)}</span>
-              </div>
-              <div className={styles.statRow}>
-                <span>Videos</span>
-                <span>{formatBytes(storage?.videos ?? 0)}</span>
-              </div>
-              <div className={styles.statRow}>
-                <span>Audio</span>
-                <span>{formatBytes(storage?.audio ?? 0)}</span>
-              </div>
-              <div className={`${styles.statRow} ${styles.totalRow}`}>
-                <span>Total</span>
-                <span>{formatBytes(storage?.total ?? 0)}</span>
-              </div>
+              <p className={styles.storageNote}>
+                These stats cover only this code's space. Other codes are
+                never affected.
+              </p>
               <button
                 className={styles.dangerBtn}
-                onClick={handleClearAll}
+                onClick={() => setConfirmClear(true)}
                 disabled={clearing}
               >
                 {clearing ? 'Clearing...' : cleared ? 'All data cleared' : 'Clear All Data'}
@@ -128,14 +126,36 @@ export function SettingsPanel() {
                 </svg>
               </div>
               <div className={styles.aboutName}>{info?.name ?? 'FileHelper'}</div>
-              <div className={styles.aboutVersion}>Version {info?.version ?? '0.1.0'}</div>
+              <div className={styles.aboutVersion}>Version {info?.version ?? '0.2.0'}</div>
               <p className={styles.aboutText}>
-                A tiny cross-platform file transfer assistant for your local network.
+                A tiny end-to-end encrypted file transfer assistant for
+                your local network.
               </p>
+              <div className={styles.securityBox}>
+                <div className={styles.securityTitle}>Security</div>
+                <ul>
+                  <li>Messages and files are encrypted in your browser before upload.</li>
+                  <li>The server stores ciphertext only and never sees your code.</li>
+                  <li>Anyone with the same code can access the same data — use a long, unique passphrase.</li>
+                  <li>Plain HTTP is intended for trusted LANs; HTTP does not prevent an active attacker on your network from tampering with the web client.</li>
+                  <li>On untrusted networks use HTTPS, Tailscale, or WireGuard.</li>
+                </ul>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {confirmClear && (
+        <ConfirmDialog
+          title="Clear all data?"
+          message="This permanently deletes every message and file in this space. Other codes are not affected."
+          confirmLabel="Clear"
+          danger
+          onConfirm={() => handleClearAll()}
+          onCancel={() => setConfirmClear(false)}
+        />
+      )}
     </div>
   );
 }

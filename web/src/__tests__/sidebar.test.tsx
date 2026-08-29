@@ -5,6 +5,11 @@ import { Sidebar } from '../features/sidebar/Sidebar';
 import { useUIStore } from '../stores/ui';
 import { useAuthStore } from '../stores/auth';
 import { messageKeys } from '../api/queryKeys';
+import { bytesToBase64url } from '../lib/crypto/encoding';
+import { encryptMessagePayload } from '../lib/crypto/messages';
+import { saveCryptoSession } from '../lib/crypto/session';
+
+const KEY = bytesToBase64url(new Uint8Array(32).fill(9));
 
 function renderSidebar() {
   const client = new QueryClient({
@@ -20,8 +25,17 @@ function renderSidebar() {
 describe('Sidebar', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     useUIStore.setState({ theme: 'system', mobileChatOpen: false, settingsOpen: false, settingsSection: 'appearance' });
-    useAuthStore.setState({ isAuthenticated: true, loginError: null });
+    useAuthStore.setState({ phase: 'ready', loginError: null, needsCreate: false, pendingCreate: null, instanceId: 'inst' });
+    // Sidebar decrypts the latest message using the crypto session.
+    saveCryptoSession({
+      spaceId: 'space-test',
+      authKey: KEY,
+      messageKey: KEY,
+      fileMasterKey: KEY,
+      instanceId: 'inst',
+    });
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -53,12 +67,12 @@ describe('Sidebar', () => {
     expect(useUIStore.getState().settingsSection).toBe('storage');
   });
 
-  it('Lock logs the user out', async () => {
+  it('Lock returns to the login page (phase locked)', async () => {
     renderSidebar();
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     fireEvent.click(screen.getByRole('menuitem', { name: /Lock/ }));
     await vi.waitFor(() => {
-      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState().phase).toBe('locked');
     });
   });
 
@@ -69,21 +83,19 @@ describe('Sidebar', () => {
         <Sidebar />
       </QueryClientProvider>
     );
-    // Matching input keeps the chat row.
     fireEvent.change(screen.getByLabelText('Search chats'), { target: { value: 'filehelper' } });
     expect(screen.getByText('FileHelper')).toBeDefined();
-    // Non-matching input shows "No chats found".
     fireEvent.change(screen.getByLabelText('Search chats'), { target: { value: 'zzz' } });
     expect(screen.getByText('No chats found')).toBeDefined();
   });
 
-  it('shows the latest message preview from the latest cache', async () => {
+  it('shows the decrypted latest message preview', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const payload = encryptMessagePayload(KEY, 'space-test', { type: 'text', text: 'hello from cache' });
     client.setQueryData(messageKeys.latest, {
       messages: [{
         id: 'm1',
-        kind: 'text',
-        text: 'hello from cache',
+        payload,
         createdAt: new Date().toISOString(),
         attachment: null,
       }],

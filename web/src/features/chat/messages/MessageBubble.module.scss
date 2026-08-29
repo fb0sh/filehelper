@@ -1,6 +1,66 @@
 .wrapper {
   display: flex;
   justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
   margin-bottom: 4px;
   padding: 0 8px;
+  border-radius: 12px;
+  transition: background var(--transition-fast);
+
+  // Selection mode: left gutter checkbox + gentle selected overlay.
+  &.selectable {
+    cursor: pointer;
+  }
+
+  &.selected {
+    background: rgba(var(--primary-color-rgb), 0.1);
+  }
+}
+
+.checkbox {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin-top: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong, var(--text-secondary));
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.18s ease-out;
+
+  &.checked {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+  }
+}
+
+// Reserved gutter so the bubble never shifts when selection mode toggles.
+.checkboxSlot {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin-top: 14px;
+  visibility: hidden;
+}
+
+.undecryptable {
+  background: var(--surface-alt, var(--border-color));
+  color: var(--text-secondary);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-style: italic;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wrapper,
+  .checkbox {
+    transition: none;
+  }
 }

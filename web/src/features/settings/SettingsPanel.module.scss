@@ -151,3 +151,32 @@
   margin-top: 16px;
   line-height: 1.5;
 }
+.storageNote {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 4px 0 12px;
+  line-height: 1.5;
+}
+
+.securityBox {
+  margin-top: 16px;
+  background: var(--surface-alt, var(--border-color));
+  border-radius: 10px;
+  padding: 12px;
+  text-align: left;
+
+  .securityTitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+}

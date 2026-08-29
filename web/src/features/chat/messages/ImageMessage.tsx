@@ -1,37 +1,128 @@
-import { Message } from '../../../api';
+import { DecryptedMessage } from '../../../lib/crypto/messages';
 import { formatMessageTime } from '../../../lib/dates';
-import { useState } from 'react';
+import { formatBytes } from '../../../lib/bytes';
+import { useEffect, useRef, useState } from 'react';
 import { MediaViewer } from '../../viewer/MediaViewer';
+import { canPreviewImage, loadImagePreview, ImageNotPreviewableError } from '../../../lib/imagePreview';
+import { imagePreviewCache } from '../../../lib/imagePreviewCache';
+import { Download } from 'lucide-react';
 import styles from './ImageMessage.module.scss';
 
 interface Props {
-  message: Message;
+  message: DecryptedMessage;
+  onDownload: () => void;
 }
 
-export function ImageMessage({ message }: Props) {
-  const [viewerOpen, setViewerOpen] = useState(false);
+type PreviewState =
+  | { state: 'hidden' } // not yet near viewport
+  | { state: 'loading' }
+  | { state: 'ready'; url: string }
+  | { state: 'error' }
+  | { state: 'invalid' }; // decrypted, but not a safe raster image
+
+// Images preview only after decrypt + magic validation, lazily when the
+// bubble approaches the viewport (IntersectionObserver). SVG and
+// oversized images are never previewed.
+export function ImageMessage({ message, onDownload }: Props) {
   const att = message.attachment;
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [preview, setPreview] = useState<PreviewState>({ state: 'hidden' });
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const loadedRef = useRef(false);
+
+  const previewable = att ? canPreviewImage(att) : false;
+
+  useEffect(() => {
+    if (!att || !previewable || loadedRef.current) return;
+    // Cache hit → show instantly.
+    const cached = imagePreviewCache.get(att.id);
+    if (cached) {
+      loadedRef.current = true;
+      setPreview({ state: 'ready', url: cached });
+      return;
+    }
+
+    const el = wrapperRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          observer.disconnect();
+          loadedRef.current = true;
+          setPreview({ state: 'loading' });
+          loadImagePreview(att)
+            .then((url) => setPreview({ state: 'ready', url }))
+            .catch((e) =>
+              setPreview(
+                e instanceof ImageNotPreviewableError
+                  ? { state: 'invalid' }
+                  : { state: 'error' }
+              )
+            );
+        }
+      },
+      { rootMargin: '300px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [att, previewable]);
+
   if (!att) return null;
+
+  // Not previewable (SVG / wrong mime / too large) → plain file card.
+  if (!previewable || preview.state === 'invalid') {
+    return (
+      <div className={styles.card} onClick={onDownload} data-file-card="">
+        <div className={styles.cardIcon}>
+          <Download size={18} />
+        </div>
+        <div className={styles.cardInfo}>
+          <div className={styles.cardName}>{att.filename}</div>
+          <div className={styles.cardSize}>
+            {att.size > 64 * 1024 * 1024
+              ? 'Image too large to preview'
+              : formatBytes(att.size)}
+          </div>
+        </div>
+        <div className={styles.cardMeta}>
+          <span className={styles.time}>{formatMessageTime(message.createdAt)}</span>
+          <span className={styles.check}>✓</span>
+        </div>
+      </div>
+    );
+  }
+
+  const openViewer = () => {
+    if (preview.state === 'ready') setViewerOpen(true);
+  };
 
   return (
     <>
-      <div className={styles.bubble} onClick={() => setViewerOpen(true)}>
+      <div
+        ref={wrapperRef}
+        className={styles.bubble}
+        onClick={openViewer}
+        data-image-message=""
+      >
         <div className={styles.imageWrapper}>
-          <img
-            src={att.contentUrl}
-            alt={att.filename}
-            className={styles.image}
-            loading="lazy"
-          />
+          {preview.state === 'ready' ? (
+            <img src={preview.url} alt={att.filename} className={styles.image} />
+          ) : preview.state === 'error' ? (
+            <div className={styles.previewError}>Unable to decrypt this image</div>
+          ) : (
+            <div className={styles.placeholder}>
+              {preview.state === 'loading' ? 'Decrypting…' : ''}
+            </div>
+          )}
           <div className={styles.overlay}>
             <span className={styles.time}>{formatMessageTime(message.createdAt)}</span>
             <span className={styles.check}>✓</span>
           </div>
         </div>
       </div>
-      {viewerOpen && (
+      {viewerOpen && preview.state === 'ready' && (
         <MediaViewer
-          url={att.contentUrl}
+          url={preview.url}
           filename={att.filename}
           onClose={() => setViewerOpen(false)}
         />

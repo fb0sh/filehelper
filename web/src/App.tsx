@@ -2,17 +2,18 @@ import { useAuthStore } from './stores/auth';
 import { LoginPage } from './features/auth/LoginPage';
 import { MainLayout } from './features/MainLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 export default function App() {
-  const { isAuthenticated, checkSession } = useAuthStore();
-  const [loading, setLoading] = useState(true);
+  const { phase, autoLogin } = useAuthStore();
 
+  // Restore the per-tab crypto session (sessionStorage): if present,
+  // re-login silently — no CODE prompt needed after a refresh.
   useEffect(() => {
-    checkSession().finally(() => setLoading(false));
-  }, [checkSession]);
+    void autoLogin();
+  }, [autoLogin]);
 
-  if (loading) {
+  if (phase === 'unlocking' && !useAuthStore.getState().instanceId) {
     return (
       <div style={{
         display: 'flex',
@@ -45,7 +46,7 @@ export default function App() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (phase !== 'ready') {
     return <LoginPage />;
   }
 

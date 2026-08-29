@@ -1,8 +1,37 @@
 # FileHelper
 
-A tiny cross-platform file transfer assistant for your local network, powered by Rust.
+A tiny end-to-end encrypted file transfer assistant for your local network, powered by Rust.
 
 ![FileHelper](docs/screenshots/desktop-main.png)
+
+## Product
+
+No accounts. No registration. No server-generated password.
+
+You only need to understand one thing:
+
+**CODE**
+
+```text
+FileHelper
+Enter code
+[••••••••••••••]
+Continue
+```
+
+Enter any code you like — Chinese, Tibetan, English, digits, spaces, emoji,
+anything. **The same code on another device opens the same files and
+messages.** A different code opens a completely separate space.
+
+```text
+我的私人文件#2026@Test!     →  space 1
+བོད་ཡིགFileHelper✨         →  space 2
+Correct Horse Battery Staple → space 3
+```
+
+Codes are case-sensitive (`Hello`, `hello` and `HELLO` are three different
+spaces) and are normalized with Unicode NFC only — nothing is trimmed,
+lowercased or folded. Same code → same keys → same space.
 
 ## Quick Start
 
@@ -21,43 +50,36 @@ filehelper.exe
 Then open what the terminal prints:
 
 ```text
-Open:          http://192.168.1.23:8080
-Access code:   483921
+Open:
+  http://192.168.1.23:8080
 ```
 
-Enter the access code in the browser and start sending text and files. The
-default data is kept in FileHelper's application data directory
-(`~/.local/share/filehelper`, `~/Library/Application Support/FileHelper`, or
-`%LOCALAPPDATA%\FileHelper`), so a restart continues where you left off — your
-messages and files survive, and a fresh access code is generated each launch.
+Enter any code. Use the same code on another device to access the same
+encrypted messages and files.
 
 ## Features
 
 - Telegram-like Web UI (desktop double column + mobile single column, light & dark)
-- Text, file, image, video and audio transfer
-- Drag & drop and clipboard image paste
-- Real-time sync across browsers via WebSocket
-- Full-text search (FTS5) with jump-to-message
-- SQLite persistence, files stored on disk under UUID names
-- Access code authentication (no accounts)
-- Streaming upload/download with HTTP Range support
+- End-to-end encrypted text and file transfer
+- Your code is derived in the browser (Scrypt) into separate keys for auth,
+  messages and files; the server stores **ciphertext only**
+- Per-space isolation: different codes are invisible to each other
+- Real-time sync across browsers via WebSocket (space-scoped)
+- Client-side search over decrypted history (the server can't search for you)
+- Image preview after client-side decryption + magic-header validation
+- Telegram-style multi-select, selection plate, and delete confirmation
+- SQLite persistence; files stored under random UUID names
 - Single binary, no runtime dependencies
 
 ## Modes
 
 ```bash
-# Default: comfortable mode — restores previous data, fresh access code
+# Default: keeps your data, same space for the same code
 ./filehelper
 
-# One-shot mode — temp data, fresh access code, everything removed on exit
+# One-shot run — OS temp data dir, fresh instance, removed on exit
 ./filehelper --ephemeral
-
-# New access code — old browser sessions become invalid, data is kept
-./filehelper --reset-code
 ```
-
-That is the whole model: `filehelper` keeps your stuff, `--reset-code` rotates
-the code, `--ephemeral` leaves no trace.
 
 ## Usage
 
@@ -65,10 +87,8 @@ the code, `--ephemeral` leaves no trace.
 filehelper [OPTIONS]
 
 --addr <ADDR>            Listen address (default: 0.0.0.0:8080)
---password <PASSWORD>    Access code for this run only (does not overwrite the stored code)
 --data-dir <PATH>        Override the data directory
---ephemeral              One-shot run: temp data dir, cleanup on exit
---reset-code             Generate a new access code, keep all data
+--ephemeral              One-shot run: temp data dir, cleanup on graceful exit
 --max-upload-size <SIZE> Max upload size in bytes (default: 10 GiB)
 --version, --help
 ```
@@ -77,12 +97,80 @@ filehelper [OPTIONS]
 
 ```
 <data dir>/
-├── filehelper.db   # SQLite database (messages, attachments, FTS, auth hash)
-├── files/          # Stored files, UUID-named
-├── tmp/            # In-flight upload parts
+├── filehelper.db   # SQLite: spaces (auth verifier only), encrypted messages
+├── files/          # Encrypted file chunks, UUID-named
+├── tmp/            # In-flight encrypted upload parts
 ├── trash/          # Deleted files awaiting final removal
-└── secret          # Access code + session signing key (user-readable only)
+└── session-secret  # Session token signing key (0600)
 ```
+
+The server never sees your code, message text, filenames, MIME types, or file
+contents. `strings` and hex editors on `filehelper.db` / `files/**` find
+nothing readable.
+
+### Legacy data
+
+The vNext E2EE redesign creates a new encrypted store. If a previous
+(pre-0.2) plaintext data directory is found at startup, it is **not** read or
+migrated — the whole directory is renamed aside untouched to
+`legacy-backup-YYYYMMDD-HHMMSS/` and a fresh encrypted store is created:
+
+```text
+Legacy FileHelper data was preserved at:
+  /path/to/legacy-backup-20260829-224252
+```
+
+## Crypto format (CRYPTO_VERSION = 1)
+
+```text
+CODE
+ │ NFC normalize
+ ▼
+Scrypt(N=2^16, r=8, p=1, dkLen=32)  salt = "filehelper/v1/scrypt:" + instanceId
+ ▼
+root key ──HKDF-SHA256 (domain separation)──▶ space-id / auth / messages / files
+```
+
+- `spaceId` = base64url(first 24 bytes of the space key)
+- `authKey` → the server stores only `SHA256(authKey)` as the space verifier
+- message envelope: `FH1.<nonceB64u>.<ciphertextB64u>` (XChaCha20-Poly1305)
+- file chunks: 8 MiB plaintext per chunk, per-file key, per-chunk nonce
+  (`prefix || uint64be(index)`), AAD binds space + attachment + chunk index
+- plaintext SHA-256 is verified after every download/decrypt
+
+These parameters are frozen. Changing them would derive different keys and
+break every existing space; the vector test in `web/src/__tests__/crypto.test.ts`
+locks them forever.
+
+## Security
+
+Accurate threat model — nothing is overstated:
+
+- **CODE is processed in the browser.** The server never receives the CODE, the
+  root key, or the content keys. Messages and files are encrypted before upload.
+- **Anyone with the same CODE can access the same data.** Weak codes are
+  vulnerable to offline guessing if the server storage is ever copied. Use a
+  long, unique passphrase.
+- **Plain HTTP is intended for trusted LANs.** HTTP does not prevent an active
+  attacker on your network from modifying the web client (and thus attempting
+  to steal your code). On untrusted networks use HTTPS, Tailscale, or WireGuard.
+- Server data dir copied → attacker sees ciphertext, sizes, timestamps and
+  counts, but not codes, text, filenames, or contents.
+- Per-tab Bearer sessions (HMAC-signed, 24 h TTL); every space-scoped query
+  goes through `WHERE space_id = ?`. WebSocket events never cross spaces.
+- Rate limiting: 5 failed logins / 60 s / IP, 10 space creations / 60 s / IP.
+- Security headers on every response: CSP (no video/audio preview),
+  `nosniff`, `no-referrer`, `X-Frame-Options: DENY`.
+
+### Web Platform limitation (large downloads over HTTP)
+
+Browsers can only stream a decrypted file to disk through
+`showSaveFilePicker`, which requires a secure context. On plain LAN HTTP that
+API is often unavailable, and there is no generic "stream to file" fallback.
+FileHelper therefore caps the Blob fallback at 128 MiB; larger files over
+plain HTTP in such browsers show a clear explanation instead of silently
+downloading ciphertext or buffering gigabytes into RAM. Open FileHelper via
+HTTPS (or Tailscale) in a compatible Chromium browser for large downloads.
 
 ## Build from Source
 
@@ -103,42 +191,26 @@ mise run test   # fmt + clippy + Rust tests + frontend tests
 mise run build  # frontend build + release binary
 ```
 
-## Security
-
-- Access code (6 digits, CSPRNG) protects every API route; only `/api/v1/info`,
-  `/api/v1/auth/login` and `/api/v1/auth/session` are unauthenticated.
-- The access code is stored as an Argon2id hash; verification is
-  constant-time. Login is rate-limited per IP (5 failures / minute).
-- A fresh access code is generated on every launch, and the session signing
-  key rotates with it, so old browser sessions are invalidated after a
-  restart. Sessions are stateless HMAC-SHA256 signed cookies (HttpOnly,
-  SameSite=Strict, 30-day TTL).
-- Files are stored under UUID names; original filenames (any Unicode) live only
-  in the database, so path traversal is impossible.
-
-Access code controls who can reach the app, but plain HTTP does not encrypt
-traffic. For public Wi-Fi or untrusted networks, put FileHelper behind
-Tailscale, WireGuard, or an HTTPS reverse proxy.
-
 ## API Overview
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/auth/login` | Verify access code, set session cookie |
-| POST | `/api/v1/auth/logout` | Clear session cookie |
-| GET | `/api/v1/auth/session` | Check session |
-| GET | `/api/v1/messages` | List messages (cursor pagination) |
-| POST | `/api/v1/messages` | Send a text message |
-| GET | `/api/v1/messages/{id}/context` | Message window for search jump |
+| GET | `/api/v1/info` | Server info (instanceId, cryptoVersion, maxUploadSize) |
+| POST | `/api/v1/auth/login` | Verify `{spaceId, authKey}` → Bearer session token |
+| POST | `/api/v1/auth/create` | Create a new space (rate limited) |
+| GET | `/api/v1/messages` | List encrypted messages (cursor pagination) |
+| POST | `/api/v1/messages` | Store an encrypted message payload |
+| GET | `/api/v1/messages/{id}/context` | Encrypted context window for search jump |
 | DELETE | `/api/v1/messages/{id}` | Delete a message (and its file) |
-| POST | `/api/v1/clear` | Clear all messages and files |
-| POST | `/api/v1/uploads` | Upload one file (multipart) |
-| GET | `/api/v1/files/{id}/content` | Inline file content (Range support) |
-| GET | `/api/v1/files/{id}/download` | Attachment download |
-| GET | `/api/v1/search` | Full-text search |
-| GET | `/api/v1/storage` | Storage statistics |
-| GET | `/api/v1/ws` | WebSocket realtime |
-| GET | `/api/v1/info` | Server info |
+| POST | `/api/v1/messages/batch-delete` | Delete up to 500 ids in one transaction |
+| POST | `/api/v1/clear` | Clear the current space only |
+| POST | `/api/v1/uploads` | Init an upload → `{uploadId, attachmentId}` |
+| PUT | `/api/v1/uploads/{id}/chunks/{i}` | Append one encrypted chunk (sequential) |
+| POST | `/api/v1/uploads/{id}/complete` | Finalize: store message + attachment |
+| DELETE | `/api/v1/uploads/{id}` | Cancel an upload |
+| GET | `/api/v1/files/{id}/download` | Encrypted octet-stream download |
+| GET | `/api/v1/storage` | Space-scoped storage stats |
+| GET | `/api/v1/ws` | WebSocket (in-band auth frame, space-scoped events) |
 
 ## License
 

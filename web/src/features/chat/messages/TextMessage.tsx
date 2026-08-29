@@ -1,9 +1,9 @@
-import { Message } from '../../../api';
+import { DecryptedMessage } from '../../../lib/crypto/messages';
 import { formatMessageTime } from '../../../lib/dates';
 import styles from './TextMessage.module.scss';
 
 interface Props {
-  message: Message;
+  message: DecryptedMessage;
 }
 
 export function TextMessage({ message }: Props) {

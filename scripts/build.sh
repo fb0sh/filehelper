@@ -14,4 +14,4 @@ cargo build --release
 
 echo ""
 echo "Binary: ./target/release/filehelper"
-echo "Run: ./target/release/filehelper --addr 0.0.0.0:8080 --password 123"
+echo "Run: ./target/release/filehelper --addr 0.0.0.0:8080"

@@ -1,117 +1,97 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-
-import { useUIStore } from '../stores/ui';
+import { useSelectionStore } from '../stores/selection';
 import { useSearchStore } from '../stores/search';
-import { useRealtimeStore } from '../stores/realtime';
-import { messageKeys, searchKeys } from '../api/queryKeys';
-import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { renderHook, act } from '@testing-library/react';
-import { Message } from '../api';
+import { useUploadStore } from '../stores/upload';
 
-describe('useUIStore', () => {
+describe('selection store', () => {
   beforeEach(() => {
-    useUIStore.setState({ theme: 'system', mobileChatOpen: false });
-    localStorage.clear();
+    useSelectionStore.setState({ active: false, selectedIds: new Set() });
   });
 
-  it('changes theme and persists', () => {
-    useUIStore.getState().setTheme('dark');
-    expect(useUIStore.getState().theme).toBe('dark');
-    expect(localStorage.getItem('filehelper.theme')).toBe('dark');
+  it('enter with an id selects exactly that message and activates mode', () => {
+    useSelectionStore.getState().enter('a');
+    const s = useSelectionStore.getState();
+    expect(s.active).toBe(true);
+    expect(s.selectedIds.has('a')).toBe(true);
+    expect(s.count()).toBe(1);
   });
 
-  it('sets mobile chat open', () => {
-    useUIStore.getState().setMobileChatOpen(true);
-    expect(useUIStore.getState().mobileChatOpen).toBe(true);
+  it('toggle adds and removes in O(1) via Set', () => {
+    const { toggle } = useSelectionStore.getState();
+    toggle('a');
+    toggle('b');
+    toggle('a');
+    const s = useSelectionStore.getState();
+    expect(s.count()).toBe(1);
+    expect(s.selectedIds.has('b')).toBe(true);
+  });
+
+  it('exit clears everything', () => {
+    const { enter, toggle, exit } = useSelectionStore.getState();
+    enter('a');
+    toggle('b');
+    exit();
+    const s = useSelectionStore.getState();
+    expect(s.active).toBe(false);
+    expect(s.count()).toBe(0);
   });
 });
 
-describe('useSearchStore', () => {
-  beforeEach(() => {
-    useSearchStore.setState({ open: false, query: '', jumpRequest: null });
-  });
-
-  it('opens and closes search without keeping query state', () => {
-    const { setOpen, setQuery } = useSearchStore.getState();
-    setOpen(true);
-    setQuery('hello');
-    expect(useSearchStore.getState().open).toBe(true);
-    setOpen(false);
-    expect(useSearchStore.getState().open).toBe(false);
-    // Closing does not fire a jump; query is reset by consumers on next open.
-  });
-
-  it('requestJump carries a message with an incrementing nonce', () => {
-    const msg = { id: 'm1' } as Message;
-    const { requestJump } = useSearchStore.getState();
-    requestJump(msg);
-    const first = useSearchStore.getState().jumpRequest;
-    expect(first?.message.id).toBe('m1');
-    requestJump(msg);
-    const second = useSearchStore.getState().jumpRequest;
-    expect(second!.nonce).toBeGreaterThan(first!.nonce);
+describe('search store', () => {
+  it('jump requests carry the decrypted message', () => {
+    const msg = { id: 'm1' } as never;
+    useSearchStore.getState().requestJump(msg);
+    expect(useSearchStore.getState().jumpRequest?.message).toBe(msg);
     useSearchStore.getState().clearJump();
     expect(useSearchStore.getState().jumpRequest).toBeNull();
   });
 });
 
-describe('useRealtimeStore', () => {
-  it('starts in connecting state', () => {
-    expect(useRealtimeStore.getState().status).toBe('connecting');
+describe('upload store', () => {
+  beforeEach(() => {
+    useUploadStore.setState({ tasks: [] });
   });
 
-  it('tracks status transitions', () => {
-    useRealtimeStore.getState().setStatus('connected');
-    expect(useRealtimeStore.getState().status).toBe('connected');
-    useRealtimeStore.getState().setStatus('disconnected');
-    expect(useRealtimeStore.getState().status).toBe('disconnected');
-  });
-});
-
-describe('query keys', () => {
-  it('separates infinite and latest message caches', () => {
-    expect(messageKeys.infinite).toEqual(['messages', 'infinite']);
-    expect(messageKeys.latest).toEqual(['messages', 'latest']);
-    expect(messageKeys.infinite).not.toEqual(messageKeys.latest);
+  it('adds tasks queued and computes active counts', () => {
+    useUploadStore.getState().addTasks([
+      new File(['a'], 'a.txt'),
+      new File(['b'], 'b.txt'),
+    ]);
+    const s = useUploadStore.getState();
+    expect(s.tasks.length).toBe(2);
+    expect(s.tasks.every((t) => t.status === 'queued')).toBe(true);
+    expect(s.getActiveCount()).toBe(2);
   });
 
-  it('scopes search cache by query', () => {
-    expect(searchKeys.results('abc')).toEqual(['search', 'abc']);
-    expect(searchKeys.results('abc')).not.toEqual(searchKeys.results('abd'));
-  });
-});
-
-describe('useDebouncedValue', () => {
-  it('updates only after the delay', () => {
-    vi.useFakeTimers();
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedValue(value, 300),
-      { initialProps: { value: 'a' } }
-    );
-    expect(result.current).toBe('a');
-    rerender({ value: 'ab' });
-    // Before the delay elapses the old value is still served.
-    act(() => { vi.advanceTimersByTime(100); });
-    expect(result.current).toBe('a');
-    act(() => { vi.advanceTimersByTime(300); });
-    expect(result.current).toBe('ab');
-    vi.useRealTimers();
+  it('cancel marks the task cancelled and aborts its controller', () => {
+    useUploadStore.getState().addTasks([new File(['x'], 'x.bin')]);
+    const id = useUploadStore.getState().tasks[0].id;
+    const abort = { abort: () => {} };
+    const abortSpy = vi.spyOn(abort, 'abort');
+    useUploadStore.getState().updateTask(id, {
+      status: 'uploading',
+      abortController: abort as unknown as AbortController,
+    });
+    useUploadStore.getState().cancelTask(id);
+    const t = useUploadStore.getState().tasks[0];
+    expect(t.status).toBe('cancelled');
+    expect(abortSpy).toHaveBeenCalled();
   });
 
-  it('cancels pending updates when the value changes again', () => {
-    vi.useFakeTimers();
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedValue(value, 300),
-      { initialProps: { value: 'first' } }
-    );
-    rerender({ value: 'second' });
-    act(() => { vi.advanceTimersByTime(200); });
-    rerender({ value: 'third' });
-    act(() => { vi.advanceTimersByTime(200); });
-    // 'second' was pending but got cancelled — never leaks through.
-    expect(result.current).toBe('first');
-    act(() => { vi.advanceTimersByTime(200); });
-    expect(result.current).toBe('third');
-    vi.useRealTimers();
+  it('retry resets progress and upload state', () => {
+    useUploadStore.getState().addTasks([new File(['y'], 'y.bin')]);
+    const id = useUploadStore.getState().tasks[0].id;
+    useUploadStore.getState().updateTask(id, {
+      status: 'failed',
+      error: 'boom',
+      uploadId: 'up-1',
+      progress: 40,
+    });
+    useUploadStore.getState().retryTask(id);
+    const t = useUploadStore.getState().tasks[0];
+    expect(t.status).toBe('queued');
+    expect(t.error).toBeUndefined();
+    expect(t.uploadId).toBeUndefined();
+    expect(t.progress).toBe(0);
   });
 });

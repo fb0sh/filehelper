@@ -1,16 +1,8 @@
-export { request, ApiError, API_BASE } from './client';
+export { request, ApiError, API_BASE, authedFetch, setSessionToken, getSessionToken, setReauthHandler, setLockHandler, clearSessionToken } from './client';
 export { authApi } from './auth';
-export type { LoginRequest, LoginResponse, SessionInfo } from './auth';
+export type { ServerInfo, AuthRequest, AuthResponse } from './auth';
 export { messagesApi } from './messages';
-export type {
-  Message,
-  MessageAttachment,
-  MessageListResponse,
-  MessageContextResponse,
-  RealtimeEvent,
-} from './messages';
-export { uploadFile } from './files';
-export type { UploadOptions } from './files';
-export { searchApi } from './search';
-export type { SearchResponse } from './search';
+export type { EncryptedMessage, EncryptedAttachment, MessageListResponse, MessageContextResponse, RealtimeEvent } from './messages';
+export { uploadsApi } from './uploads';
+export type { UploadInitResponse } from './uploads';
 export { messageKeys, searchKeys } from './queryKeys';

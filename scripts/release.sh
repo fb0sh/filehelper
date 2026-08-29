@@ -9,10 +9,13 @@ echo "=== cargo clippy ==="
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 echo "=== cargo test ==="
-cargo test --test integration_test
+cargo test --workspace
+
+echo "=== frontend lint ==="
+cd web && npx eslint .
 
 echo "=== frontend test ==="
-cd web && npx vitest run
+npx vitest run
 
 echo "=== frontend build ==="
 npx vite build

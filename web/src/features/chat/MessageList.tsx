@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { messagesApi, Message, messageKeys } from '../../api';
+import { messagesApi, messageKeys, EncryptedMessage } from '../../api';
 import { useUploadStore } from '../../stores/upload';
+import { useSelectionStore } from '../../stores/selection';
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { MessageBubble } from './messages/MessageBubble';
 import { UploadMessage } from './messages/UploadMessage';
@@ -10,10 +11,12 @@ import { formatDateSeparator } from '../../lib/dates';
 import { isNearBottom, shouldLoadMore } from '../../lib/scroll';
 import { computeAddedNewest, decideNewMessage } from '../../lib/newMessages';
 import { contextToInfiniteData } from '../../lib/realtimeCache';
+import { useDecryptedMessages } from '../../hooks/useDecryptedMessages';
+import type { DecryptedMessage } from '../../lib/crypto/messages';
 import styles from './MessageList.module.scss';
 
 export interface MessageListHandle {
-  jumpToMessage: (msg: Message) => void;
+  jumpToMessage: (msg: DecryptedMessage) => void;
 }
 
 export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
@@ -21,8 +24,6 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevScrollHeight = useRef(0);
   const isLoadingMore = useRef(false);
-  // Was the user near the bottom *before* a new message rendered? Saved on
-  // every scroll so the decision never depends on post-render scrollHeight.
   const wasNearBottomRef = useRef(true);
   const previousNewestIdRef = useRef<string | undefined>(undefined);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -33,6 +34,9 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   const uploadTasks = useUploadStore((s) => s.tasks);
   const cancelTask = useUploadStore((s) => s.cancelTask);
   const retryTask = useUploadStore((s) => s.retryTask);
+  const selectionActive = useSelectionStore((s) => s.active);
+  const selectedIds = useSelectionStore((s) => s.selectedIds);
+  const toggleSelected = useSelectionStore((s) => s.toggle);
   const queryClient = useQueryClient();
 
   const activeTasks = uploadTasks.filter(
@@ -52,21 +56,20 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
     initialPageParam: undefined as string | undefined,
   });
 
-  const allMessages = data?.pages.flatMap((p) => p.messages) ?? [];
-  // Keep the newest-first cache handy for the effect below.
-  const allMessagesRef = useRef(allMessages);
-  allMessagesRef.current = allMessages;
-  const newestId = allMessages[0]?.id;
+  const encrypted = data?.pages.flatMap((p) => p.messages) ?? [];
+  const { messages: decryptedMessages } = useDecryptedMessages(encrypted);
+
+  // Keep the newest-first encrypted cache handy for jump/context work.
+  const encryptedRef = useRef(encrypted);
+  encryptedRef.current = encrypted;
+  const newestId = encrypted[0]?.id;
 
   // Cache is newest-first; render old → new.
-  const messages = [...allMessages].reverse();
+  const messages = [...decryptedMessages].reverse();
 
-  // React to genuinely new messages (newest id changed), never to history
-  // pagination (which appends at the end and keeps the newest id).
   useEffect(() => {
     const prev = previousNewestIdRef.current;
     if (prev === undefined) {
-      // First load: record the newest id and land at the bottom.
       previousNewestIdRef.current = newestId;
       wasNearBottomRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'auto' });
@@ -75,7 +78,7 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
     if (newestId === prev) return;
 
     previousNewestIdRef.current = newestId;
-    const added = computeAddedNewest(prev, allMessagesRef.current);
+    const added = computeAddedNewest(prev, encryptedRef.current);
     const decision = decideNewMessage(wasNearBottomRef.current, added);
 
     if (decision.kind === 'scroll') {
@@ -92,7 +95,6 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Track "near bottom" on every scroll, before any pagination logic.
     const nearBottom = isNearBottom(container, 150);
     wasNearBottomRef.current = nearBottom;
     setShowScrollBtn(!nearBottom);
@@ -114,18 +116,18 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   useImperativeHandle(ref, () => ({
-    jumpToMessage: async (msg: Message) => {
+    jumpToMessage: async (msg: DecryptedMessage) => {
       const exists = messages.some((m) => m.id === msg.id);
       if (!exists) {
-        // Load the real context window around the target so time order
-        // stays intact — never splice a lone message into the cache.
+        // Load the real encrypted context window around the target and
+        // replace the cache so time order stays intact (the display is
+        // derived by useDecryptedMessages).
         try {
           const ctx = await messagesApi.context(msg.id, 50);
           queryClient.setQueryData(
             messageKeys.infinite,
             contextToInfiniteData(ctx.messages, ctx.nextCursor)
           );
-          // Allow a frame for the list to render.
           await new Promise((r) => setTimeout(r, 80));
         } catch {
           return;
@@ -155,15 +157,27 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
           {grouped.map((group, gi) => (
             <div key={gi}>
               <DateSeparator date={group.date} />
-              {group.messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  data-message-id={msg.id}
-                  className={highlightId === msg.id ? styles.highlighted : undefined}
-                >
-                  <MessageBubble message={msg} />
-                </div>
-              ))}
+              {group.messages.map((msg) => {
+                const selected = selectedIds.has(msg.id);
+                return (
+                  <div
+                    key={msg.id}
+                    data-message-id={msg.id}
+                    className={
+                      highlightId === msg.id
+                        ? styles.highlighted
+                        : undefined
+                    }
+                  >
+                    <MessageBubble
+                      message={msg}
+                      selectionMode={selectionActive}
+                      selected={selected}
+                      onToggleSelect={() => toggleSelected(msg.id)}
+                    />
+                  </div>
+                );
+              })}
             </div>
           ))}
           {activeTasks.map((task) => (
@@ -193,8 +207,8 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
 
 MessageList.displayName = 'MessageList';
 
-function groupByDate(messages: Message[]): { date: string; messages: Message[] }[] {
-  const groups: { date: string; messages: Message[] }[] = [];
+function groupByDate(messages: DecryptedMessage[]): { date: string; messages: DecryptedMessage[] }[] {
+  const groups: { date: string; messages: DecryptedMessage[] }[] = [];
   for (const msg of messages) {
     const date = formatDateSeparator(msg.createdAt);
     const last = groups[groups.length - 1];
@@ -206,3 +220,5 @@ function groupByDate(messages: Message[]): { date: string; messages: Message[] }
   }
   return groups;
 }
+
+export type { EncryptedMessage };

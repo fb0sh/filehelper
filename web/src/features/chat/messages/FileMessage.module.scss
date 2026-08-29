@@ -31,6 +31,18 @@
   color: white;
 }
 
+.iconGlyph {
+  color: white;
+}
+
+.kindTag {
+  margin-left: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.75;
+}
+
 .info {
   flex: 1;
   min-width: 0;
@@ -62,6 +74,8 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  border: none;
+  background: none;
   display: flex;
   align-items: center;
   justify-content: center;

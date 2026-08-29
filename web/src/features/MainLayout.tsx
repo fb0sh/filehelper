@@ -7,15 +7,21 @@ import { useEffect } from 'react';
 import { InfiniteData, useQueryClient } from '@tanstack/react-query';
 import { createWebSocket } from '../lib/websocket';
 import {
+  EncryptedMessage,
   MessageListResponse,
   RealtimeEvent,
   messageKeys,
 } from '../api';
-import { prependMessageDedupe, removeMessageFromPages } from '../lib/realtimeCache';
+import {
+  prependMessageDedupe,
+  removeMessagesFromPages,
+} from '../lib/realtimeCache';
 import { useGlobalDragDrop } from '../hooks/useGlobalDragDrop';
 import { useGlobalPaste } from '../hooks/useGlobalPaste';
 import { useUploadManager } from '../hooks/useUploadManager';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { decryptedCache } from '../lib/decryptedCache';
+import { imagePreviewCache } from '../lib/imagePreviewCache';
 import { FileText } from 'lucide-react';
 import styles from './MainLayout.module.scss';
 
@@ -49,9 +55,19 @@ export function MainLayout() {
           );
           queryClient.invalidateQueries({ queryKey: messageKeys.latest });
         } else if (e.type === 'message.deleted' && e.messageId) {
+          decryptedCache.delete(e.messageId);
+          imagePreviewCache.delete(e.messageId);
           queryClient.setQueryData<InfiniteData<MessageListResponse>>(
             messageKeys.infinite,
-            (old) => removeMessageFromPages(old, e.messageId!)
+            (old) => removeMessagesFromPages(old, [e.messageId!])
+          );
+          queryClient.invalidateQueries({ queryKey: messageKeys.latest });
+        } else if (e.type === 'messages.deleted' && e.messageIds) {
+          decryptedCache.deleteMany(e.messageIds);
+          for (const id of e.messageIds) imagePreviewCache.delete(id);
+          queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+            messageKeys.infinite,
+            (old) => removeMessagesFromPages(old, e.messageIds!)
           );
           queryClient.invalidateQueries({ queryKey: messageKeys.latest });
         }
@@ -105,3 +121,5 @@ function DropOverlay() {
     </div>
   );
 }
+
+export type { EncryptedMessage };

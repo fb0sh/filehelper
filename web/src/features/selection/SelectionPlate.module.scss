@@ -1,0 +1,51 @@
+.plate {
+  background: var(--surface-color);
+  border-top: 1px solid var(--border-color);
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+}
+
+.inner {
+  max-width: var(--chat-max-width, 728px);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--composer-background, var(--surface-alt, var(--border-color)));
+  border-radius: 22px;
+  padding: 6px 12px;
+}
+
+.actionBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &.danger {
+    color: var(--danger-color);
+  }
+}
+
+.count {
+  flex: 1;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}

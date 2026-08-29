@@ -2,6 +2,8 @@ import { spawn, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { scryptRootKey, deriveDomainKeys } from '../../src/lib/crypto/core';
+import { encryptMessagePayload } from '../../src/lib/crypto/messages';
 
 // Playwright runs with cwd = web/
 const BIN = path.join(process.cwd(), '../target/release/filehelper');
@@ -9,15 +11,12 @@ const BIN = path.join(process.cwd(), '../target/release/filehelper');
 export interface ServerOptions {
   dataDir?: string;
   ephemeral?: boolean;
-  resetCode?: boolean;
-  password?: string;
   port?: number;
 }
 
 export interface ServerHandle {
   port: number;
   dataDir: string;
-  accessCode: string | null;
   stop: () => Promise<void>;
 }
 
@@ -31,21 +30,14 @@ export async function startServer(opts: ServerOptions = {}): Promise<ServerHandl
 
   const args = ['--addr', `127.0.0.1:${port}`, '--data-dir', dataDir];
   if (opts.ephemeral) args.push('--ephemeral');
-  if (opts.resetCode) args.push('--reset-code');
-  if (opts.password) args.push('--password', opts.password);
 
   const proc = spawn(BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  let stdout = '';
-  proc.stdout?.on('data', (d) => { stdout += d.toString(); });
   proc.stderr?.on('data', () => {});
 
   await waitForReady(port, proc);
-
-  const match = stdout.match(/Access code:\s*(\d{6})/);
   return {
     port,
     dataDir,
-    accessCode: match ? match[1] : null,
     stop: () => stopServer(proc),
   };
 }
@@ -92,6 +84,87 @@ function stopServer(proc: ChildProcess): Promise<void> {
     });
     proc.kill('SIGTERM');
   });
+}
+
+// ---------------------------------------------------------------------------
+// Node-side crypto + API helpers (mirrors the browser client exactly:
+// same scrypt/HKDF/domain separation, same message envelope).
+// ---------------------------------------------------------------------------
+
+export interface DerivedTestKeys {
+  spaceId: string;
+  authKey: string;
+  messageKey: string;
+  fileMasterKey: string;
+}
+
+export async function deriveKeys(
+  code: string,
+  instanceId: string
+): Promise<DerivedTestKeys> {
+  const root = await scryptRootKey(code, instanceId);
+  return deriveDomainKeys(root);
+}
+
+async function api(base: string, method: string, path: string, token?: string, body?: unknown) {
+  const res = await fetch(`${base}/api/v1${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-FileHelper-Request': '1',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text ? JSON.parse(text) : null };
+}
+
+/** Create the space (if needed) and log in. Returns the Bearer token. */
+export async function ensureSpace(base: string, code: string): Promise<string> {
+  const info = await api(base, 'GET', '/info');
+  const keys = await deriveKeys(code, info.body.instanceId);
+  let login = await api(base, 'POST', '/auth/login', undefined, {
+    spaceId: keys.spaceId,
+    authKey: keys.authKey,
+  });
+  if (login.status === 404) {
+    const created = await api(base, 'POST', '/auth/create', undefined, {
+      spaceId: keys.spaceId,
+      authKey: keys.authKey,
+    });
+    if (created.status !== 204 && created.status !== 409) {
+      throw new Error(`create failed: ${JSON.stringify(created)}`);
+    }
+    login = await api(base, 'POST', '/auth/login', undefined, {
+      spaceId: keys.spaceId,
+      authKey: keys.authKey,
+    });
+  }
+  if (login.status !== 200) {
+    throw new Error(`login failed: ${JSON.stringify(login)}`);
+  }
+  return login.body.sessionToken as string;
+}
+
+/** Seed an encrypted text message through the real API. */
+export async function seedEncryptedText(
+  base: string,
+  token: string,
+  messageKey: string,
+  spaceId: string,
+  text: string
+): Promise<string> {
+  const payload = encryptMessagePayload(messageKey, spaceId, { type: 'text', text });
+  const res = await api(base, 'POST', '/messages', token, { payload });
+  if (res.status !== 200) throw new Error(`seed failed: ${JSON.stringify(res)}`);
+  return res.body.id as string;
+}
+
+import { createHash } from 'node:crypto';
+
+export function sha256Hex(data: Buffer): string {
+  return createHash('sha256').update(data).digest('hex');
 }
 
 export { BIN, randomPort };

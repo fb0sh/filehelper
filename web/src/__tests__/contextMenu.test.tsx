@@ -1,103 +1,141 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MessageBubble } from '../features/chat/messages/MessageBubble';
-import { Message } from '../api';
+import { useSelectionStore } from '../stores/selection';
+import type { DecryptedMessage } from '../lib/crypto/messages';
 
-function fileMessage(): Message {
-  return {
-    id: 'm-file',
-    kind: 'document',
-    text: null,
-    createdAt: new Date().toISOString(),
-    attachment: {
-      id: 'att-1',
-      filename: 'project.zip',
-      mimeType: 'application/zip',
-      size: 12345,
-      sha256: 'abc',
-      contentUrl: '/api/v1/files/att-1/content',
-      downloadUrl: '/api/v1/files/att-1/download',
-    },
-  };
-}
+const textMsg: DecryptedMessage = {
+  id: 'm-text',
+  type: 'text',
+  text: 'abcdefg',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
 
-function textMessage(): Message {
-  return {
-    id: 'm-text',
-    kind: 'text',
-    text: 'hello',
-    createdAt: new Date().toISOString(),
-    attachment: null,
-  };
-}
+const fileMsg: DecryptedMessage = {
+  id: 'm-file',
+  type: 'file',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  attachment: {
+    id: 'att-1',
+    filename: 'report.pdf',
+    mime: 'application/pdf',
+    size: 100,
+    sha256: 'a'.repeat(64),
+    chunkSize: 8 * 1024 * 1024,
+    chunkCount: 1,
+    noncePrefix: 'A'.repeat(22),
+    downloadUrl: '/api/v1/files/att-1/download',
+  },
+};
 
-function renderBubble(msg: Message) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const utils = render(
-    <QueryClientProvider client={client}>
-      <MessageBubble message={msg} />
+function renderBubble(message: DecryptedMessage, over = {}) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MessageBubble
+        message={message}
+        selectionMode={false}
+        selected={false}
+        onToggleSelect={() => {}}
+        {...over}
+      />
     </QueryClientProvider>
   );
-  return utils;
 }
 
-function openMenu() {
-  fireEvent.contextMenu(screen.getByText(/project\.zip|hello/));
+function openMenu(element: HTMLElement, clientX = 100, clientY = 100) {
+  fireEvent.contextMenu(element, { clientX, clientY });
 }
 
-describe('context menu save-as capability', () => {
+describe('MessageBubble context menu', () => {
+  beforeEach(() => {
+    useSelectionStore.setState({ active: false, selectedIds: new Set() });
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete (window as any).showSaveFilePicker;
   });
 
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, body: null })));
+  it('text message: Copy copies the full text when there is no selection', async () => {
+    renderBubble(textMsg);
+    openMenu(screen.getByText('abcdefg'));
+    const copy = await screen.findByText('Copy');
+    fireEvent.click(copy);
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('abcdefg')
+    );
   });
 
-  it('shows Save as… when showSaveFilePicker is supported', () => {
-    (window as any).showSaveFilePicker = vi.fn();
-    renderBubble(fileMessage());
-    openMenu();
-    expect(screen.getByText('Download')).toBeDefined();
-    expect(screen.getByText('Save as…')).toBeDefined();
+  it('text message: Copy selected text copies only the snapshot', async () => {
+    renderBubble(textMsg);
+    const wrapper = screen.getByText('abcdefg').closest('[data-message-wrapper]') as Element;
+    const sel = {
+      isCollapsed: false,
+      toString: () => 'cde',
+      anchorNode: wrapper,
+    } as unknown as Selection;
+    vi.spyOn(window, 'getSelection').mockReturnValue(sel);
+
+    openMenu(screen.getByText('abcdefg'));
+    const copy = await screen.findByText('Copy selected text');
+    fireEvent.click(copy);
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('cde')
+    );
   });
 
-  it('calls showSaveFilePicker with the attachment filename on click', () => {
-    const picker = vi.fn(async () => ({
-      createWritable: vi.fn(async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() })),
-    }));
-    (window as any).showSaveFilePicker = picker;
-    renderBubble(fileMessage());
-    openMenu();
-    fireEvent.click(screen.getByText('Save as…'));
-    expect(picker).toHaveBeenCalledWith({ suggestedName: 'project.zip' });
+  it('file message: Copy filename copies the decrypted filename', async () => {
+    renderBubble(fileMsg);
+    openMenu(screen.getByText('report.pdf'));
+    const copy = await screen.findByText('Copy filename');
+    fireEvent.click(copy);
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('report.pdf')
+    );
   });
 
-  it('hides Save as… when showSaveFilePicker is unsupported', () => {
-    delete (window as any).showSaveFilePicker;
-    renderBubble(fileMessage());
-    openMenu();
-    expect(screen.getByText('Download')).toBeDefined();
+  it('Save as… only appears when showSaveFilePicker is supported', async () => {
+    const w = window as unknown as { showSaveFilePicker?: unknown };
+    delete w.showSaveFilePicker;
+    renderBubble(fileMsg);
+    openMenu(screen.getByText('report.pdf'));
+    await screen.findByText('Download');
     expect(screen.queryByText('Save as…')).toBeNull();
+
+    w.showSaveFilePicker = vi.fn();
+    renderBubble(fileMsg);
+    openMenu(screen.getAllByText('report.pdf')[0]);
+    expect(await screen.findByText('Save as…')).toBeDefined();
   });
 
-  it('text messages show Copy and Delete only', () => {
-    (window as any).showSaveFilePicker = vi.fn();
-    renderBubble(textMessage());
-    openMenu();
-    expect(screen.getByText('Copy')).toBeDefined();
-    expect(screen.getByText('Delete')).toBeDefined();
-    expect(screen.queryByText('Download')).toBeNull();
-    expect(screen.queryByText('Save as…')).toBeNull();
+  it('Select enters selection mode with the message pre-selected', async () => {
+    renderBubble(textMsg);
+    openMenu(screen.getByText('abcdefg'));
+    fireEvent.click(await screen.findByText('Select'));
+    const s = useSelectionStore.getState();
+    expect(s.active).toBe(true);
+    expect(s.selectedIds.has('m-text')).toBe(true);
   });
 
-  it('Delete is rendered with the danger class', () => {
-    (window as any).showSaveFilePicker = vi.fn();
-    renderBubble(textMessage());
-    openMenu();
-    const del = screen.getByText('Delete').closest('button') as HTMLElement;
-    expect(del.className).toContain('danger');
+  it('delete opens the confirm dialog (never window.confirm)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderBubble(textMsg);
+    openMenu(screen.getByText('abcdefg'));
+    fireEvent.click(await screen.findByText('Delete'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText('Delete this message?')).toBeDefined();
+    expect(screen.getByText('Cancel')).toBeDefined();
+  });
+
+  it('selection mode click toggles selection instead of opening menus', () => {
+    const toggle = vi.fn();
+    renderBubble(textMsg, { selectionMode: true, selected: true, onToggleSelect: toggle });
+    fireEvent.click(screen.getByText('abcdefg'));
+    expect(toggle).toHaveBeenCalled();
   });
 });

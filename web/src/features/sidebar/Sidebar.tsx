@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { messagesApi, messageKeys } from '../../api';
 import { formatMessageTime } from '../../lib/dates';
+import { decryptEncryptedMessage } from '../../lib/crypto/messages';
+import { loadCryptoSession } from '../../lib/crypto/session';
+import type { DecryptedMessage } from '../../lib/crypto/messages';
 import styles from './Sidebar.module.scss';
 import { Menu, Search as SearchIcon, HardDrive, Palette, Info, Lock, Check } from 'lucide-react';
 import { useUIStore } from '../../stores/ui';
@@ -11,9 +14,10 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 export function Sidebar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [lastDecrypted, setLastDecrypted] = useState<DecryptedMessage | null>(null);
   const setMobileChatOpen = useUIStore((s) => s.setMobileChatOpen);
   const openSettings = useUIStore((s) => s.openSettings);
-  const { logout } = useAuthStore();
+  const { lock } = useAuthStore();
   const isMobile = useIsMobile();
 
   const { data } = useQuery({
@@ -22,7 +26,19 @@ export function Sidebar() {
     refetchInterval: 30000,
   });
 
-  const lastMessage = data?.messages?.[0];
+  // Decrypt the newest message for the chat-row preview (server only
+  // stores ciphertext).
+  useEffect(() => {
+    const record = data?.messages?.[0];
+    if (!record) {
+      setLastDecrypted(null);
+      return;
+    }
+    const session = loadCryptoSession();
+    if (!session) return;
+    const outcome = decryptEncryptedMessage(session.messageKey, session.spaceId, record);
+    if (outcome.ok) setLastDecrypted(outcome.message);
+  }, [data]);
 
   const menuItems = [
     { icon: <HardDrive size={20} />, label: 'Storage', onClick: () => openSettings('storage') },
@@ -30,10 +46,13 @@ export function Sidebar() {
     { icon: <Info size={20} />, label: 'About', onClick: () => openSettings('about') },
   ];
 
-  // Sidebar search filters chats (only "FileHelper" exists) — it does not
-  // search message content; message search lives in the Chat header.
   const trimmed = searchQuery.trim().toLowerCase();
   const chatVisible = trimmed === '' || 'filehelper'.includes(trimmed);
+
+  const preview =
+    lastDecrypted?.text ??
+    lastDecrypted?.attachment?.filename ??
+    'end-to-end encrypted';
 
   return (
     <div className={styles.sidebar}>
@@ -73,13 +92,11 @@ export function Sidebar() {
             <div className={styles.chatInfo}>
               <div className={styles.chatTop}>
                 <span className={styles.chatName}>FileHelper</span>
-                {lastMessage && (
-                  <span className={styles.chatTime}>{formatMessageTime(lastMessage.createdAt)}</span>
+                {lastDecrypted && (
+                  <span className={styles.chatTime}>{formatMessageTime(lastDecrypted.createdAt)}</span>
                 )}
               </div>
-              <div className={styles.chatPreview}>
-                {lastMessage?.text || lastMessage?.attachment?.filename || 'file transfer assistant'}
-              </div>
+              <div className={styles.chatPreview}>{preview}</div>
             </div>
             <Check size={16} className={styles.selectedMark} />
           </div>
@@ -106,7 +123,7 @@ export function Sidebar() {
             <div className={styles.menuDivider} />
             <button
               className={styles.menuItem}
-              onClick={() => { setMenuOpen(false); logout(); }}
+              onClick={() => { setMenuOpen(false); void lock(); }}
               role="menuitem"
             >
               <Lock size={20} />

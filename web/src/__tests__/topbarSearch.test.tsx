@@ -1,136 +1,134 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ChatHeader } from '../features/chat/ChatHeader';
+import { TopbarSearch } from '../features/search/TopbarSearch';
 import { useSearchStore } from '../stores/search';
+import { decryptedCache } from '../lib/decryptedCache';
+import type { DecryptedMessage } from '../lib/crypto/messages';
 
-function makeResults(n: number) {
-  const results = [];
-  for (let i = 0; i < n; i++) {
-    results.push({
-      id: `m${i}`,
-      kind: 'text',
-      text: `report item ${i}`,
-      createdAt: new Date(Date.now() - i * 1000).toISOString(),
-      attachment: null,
-    });
-  }
-  return results;
+function text(id: string, text: string, createdAt: string): DecryptedMessage {
+  return { id, type: 'text', text, createdAt };
 }
 
-function stubSearch(results: unknown[]) {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (String(url).includes('/api/v1/search')) {
-      return { ok: true, status: 200, json: async () => ({ results }) };
-    }
-    return { ok: true, status: 200, json: async () => ({}) };
-  }));
+function file(id: string, filename: string, createdAt: string): DecryptedMessage {
+  return {
+    id,
+    type: 'file',
+    createdAt,
+    attachment: {
+      id: `att-${id}`,
+      filename,
+      mime: 'application/pdf',
+      size: 1,
+      sha256: 'a'.repeat(64),
+      chunkSize: 8 * 1024 * 1024,
+      chunkCount: 1,
+      noncePrefix: 'A'.repeat(22),
+      downloadUrl: `/api/v1/files/att-${id}/download`,
+    },
+  };
 }
 
-function renderHeader() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <ChatHeader />
-    </QueryClientProvider>
-  );
+function renderSearch() {
+  return render(<TopbarSearch />);
 }
 
-describe('TopbarSearch', () => {
+describe('TopbarSearch (client-side)', () => {
   beforeEach(() => {
-    useSearchStore.setState({ open: false, query: '', jumpRequest: null });
+    decryptedCache.clear();
+    useSearchStore.setState({ open: true, query: '', jumpRequest: null });
+    // Backfill fetch: empty server history.
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [], nextCursor: null }),
+    })));
+  });
+
+  afterEach(() => {
     vi.unstubAllGlobals();
-    window.matchMedia = window.matchMedia || (() => ({ matches: false }) as MediaQueryList);
   });
 
-  it('search button switches the header into search mode', () => {
-    stubSearch([]);
-    renderHeader();
-    expect(screen.queryByPlaceholderText('Search messages...')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  it('searches decrypted text and filename locally', async () => {
+    decryptedCache.set(text('m1', 'hello world', '2026-01-01T00:00:00.000Z'));
+    decryptedCache.set(text('m2', 'nothing here', '2026-01-02T00:00:00.000Z'));
+    decryptedCache.set(file('m3', 'secret-report.pdf', '2026-01-03T00:00:00.000Z'));
+
+    renderSearch();
+    const input = screen.getByPlaceholderText('Search messages...');
+    fireEvent.change(input, { target: { value: 'hello' } });
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeDefined());
+
+    fireEvent.change(input, { target: { value: 'secret-report' } });
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeDefined());
+  });
+
+  it('shows No results and does not auto-close', async () => {
+    decryptedCache.set(text('m1', 'alpha beta', '2026-01-01T00:00:00.000Z'));
+    renderSearch();
+    const input = screen.getByPlaceholderText('Search messages...');
+    fireEvent.change(input, { target: { value: 'zzz' } });
+    await waitFor(() => expect(screen.getByText('No results')).toBeDefined());
     expect(screen.getByPlaceholderText('Search messages...')).toBeDefined();
   });
 
-  it('shows "1 of N" and navigates with the arrows without closing', async () => {
-    stubSearch(makeResults(5));
-    renderHeader();
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    fireEvent.change(screen.getByPlaceholderText('Search messages...'), { target: { value: 'report' } });
+  it('newest-first counter and arrow navigation request jumps', async () => {
+    decryptedCache.set(text('old', 'needle old', '2026-01-01T00:00:00.000Z'));
+    decryptedCache.set(text('new', 'needle new', '2026-01-02T00:00:00.000Z'));
 
-    await waitFor(() => {
-      expect(screen.getByText('1 of 5')).toBeDefined();
-    });
-
-    // ↑ = older match → 2 of 5, jump requested, search stays open.
-    fireEvent.click(screen.getByRole('button', { name: 'Older match' }));
-    await waitFor(() => {
-      expect(screen.getByText('2 of 5')).toBeDefined();
-    });
-    expect(useSearchStore.getState().jumpRequest?.message.id).toBe('m1');
-    // Search mode is NOT closed after jumping.
-    expect(screen.getByPlaceholderText('Search messages...')).toBeDefined();
-
-    // ↓ = newer match → back to 1 of 5.
-    fireEvent.click(screen.getByRole('button', { name: 'Newer match' }));
-    await waitFor(() => {
-      expect(screen.getByText('1 of 5')).toBeDefined();
-    });
-    expect(useSearchStore.getState().jumpRequest?.message.id).toBe('m0');
-  });
-
-  it('disables arrows at the boundaries', async () => {
-    stubSearch(makeResults(2));
-    renderHeader();
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    fireEvent.change(screen.getByPlaceholderText('Search messages...'), { target: { value: 'report' } });
+    renderSearch();
+    const input = screen.getByPlaceholderText('Search messages...');
+    fireEvent.change(input, { target: { value: 'needle' } });
     await waitFor(() => expect(screen.getByText('1 of 2')).toBeDefined());
 
-    // Newest match: "newer" (↓) disabled.
-    expect(screen.getByRole('button', { name: 'Newer match' }).hasAttribute('disabled')).toBe(true);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Older match' }));
+    // ↑ → older match (index 2 of 2).
+    fireEvent.click(screen.getByLabelText('Older match'));
     await waitFor(() => expect(screen.getByText('2 of 2')).toBeDefined());
-    // Oldest match: "older" (↑) disabled.
-    expect(screen.getByRole('button', { name: 'Older match' }).hasAttribute('disabled')).toBe(true);
+    const jump = useSearchStore.getState().jumpRequest;
+    expect(jump?.message.id).toBe('old');
+
+    // ↓ → newer match.
+    fireEvent.click(screen.getByLabelText('Newer match'));
+    await waitFor(() => expect(screen.getByText('1 of 2')).toBeDefined());
+    expect(useSearchStore.getState().jumpRequest?.message.id).toBe('new');
   });
 
-  it('closes via X and restores the normal header', () => {
-    stubSearch([]);
-    renderHeader();
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    expect(screen.getByPlaceholderText('Search messages...')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
-    expect(screen.queryByPlaceholderText('Search messages...')).toBeNull();
-    expect(screen.getByText('FileHelper')).toBeDefined();
+  it('arrows disable at the boundaries', async () => {
+    decryptedCache.set(text('only', 'solo needle', '2026-01-01T00:00:00.000Z'));
+    renderSearch();
+    const input = screen.getByPlaceholderText('Search messages...');
+    fireEvent.change(input, { target: { value: 'solo' } });
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeDefined());
+    expect((screen.getByLabelText('Older match') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Newer match') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('Escape closes the search', () => {
+    renderSearch();
+    const input = screen.getByPlaceholderText('Search messages...');
+    fireEvent.keyDown(input, { key: 'Escape' });
     expect(useSearchStore.getState().open).toBe(false);
   });
 
-  it('closes via Escape', () => {
-    stubSearch([]);
-    renderHeader();
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    fireEvent.keyDown(screen.getByPlaceholderText('Search messages...'), { key: 'Escape' });
+  it('X closes the search', () => {
+    renderSearch();
+    fireEvent.click(screen.getByLabelText('Close search'));
     expect(useSearchStore.getState().open).toBe(false);
   });
 
-  it('shows "No results" when nothing matches', async () => {
-    stubSearch([]);
-    renderHeader();
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    fireEvent.change(screen.getByPlaceholderText('Search messages...'), { target: { value: 'zzz' } });
-    await waitFor(() => {
-      expect(screen.getByText('No results')).toBeDefined();
-    });
-  });
-
-  it('does not close search mode after a jump', async () => {
-    stubSearch(makeResults(3));
-    renderHeader();
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    fireEvent.change(screen.getByPlaceholderText('Search messages...'), { target: { value: 'report' } });
-    await waitFor(() => expect(screen.getByText('1 of 3')).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: 'Older match' }));
-    await waitFor(() => expect(screen.getByText('2 of 3')).toBeDefined());
-    expect(screen.getByPlaceholderText('Search messages...')).toBeDefined();
+  it('never calls a server search endpoint', async () => {
+    decryptedCache.set(text('m1', 'needle', '2026-01-01T00:00:00.000Z'));
+    const fetchSpy = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [], nextCursor: null }),
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    renderSearch();
+    const input = screen.getByPlaceholderText('Search messages...');
+    fireEvent.change(input, { target: { value: 'needle' } });
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeDefined());
+    // The backfill fetch is the messages list — never /search.
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes('/search'))).toBe(false);
   });
 });

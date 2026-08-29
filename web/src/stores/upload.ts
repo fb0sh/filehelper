@@ -3,13 +3,15 @@ import { create } from 'zustand';
 export interface UploadTask {
   id: string;
   file: File;
-  status: 'queued' | 'uploading' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'encrypting' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   loaded: number;
   total: number;
   speed: number;
   error?: string;
-  xhr?: XMLHttpRequest;
+  uploadId?: string;
+  attachmentId?: string;
+  abortController?: AbortController;
   messageId?: string;
 }
 
@@ -29,7 +31,7 @@ interface UploadState {
 
 export const useUploadStore = create<UploadState>((set, get) => ({
   tasks: [],
-  maxConcurrent: 3,
+  maxConcurrent: 2,
 
   addTasks: (files) => {
     const newTasks: UploadTask[] = files.map((file) => ({
@@ -42,7 +44,6 @@ export const useUploadStore = create<UploadState>((set, get) => ({
       speed: 0,
     }));
     set((s) => ({ tasks: [...s.tasks, ...newTasks] }));
-    // Trigger processing
     setTimeout(() => get().processQueue(), 0);
   },
 
@@ -57,15 +58,16 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   cancelTask: (id) => {
     const state = get();
     const task = state.tasks.find((t) => t.id === id);
-    if (task?.xhr) {
-      task.xhr.abort();
+    task?.abortController?.abort();
+    // Best-effort server-side abort.
+    if (task?.uploadId) {
+      fetch(`/api/v1/uploads/${task.uploadId}`, { method: 'DELETE' }).catch(() => {});
     }
     set((s) => ({
       tasks: s.tasks.map((t) =>
         t.id === id ? { ...t, status: 'cancelled' as const } : t
       ),
     }));
-    // Process next queued task
     setTimeout(() => get().processQueue(), 0);
   },
 
@@ -73,7 +75,17 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     set((s) => ({
       tasks: s.tasks.map((t) =>
         t.id === id
-          ? { ...t, status: 'queued' as const, progress: 0, loaded: 0, speed: 0, error: undefined }
+          ? {
+              ...t,
+              status: 'queued' as const,
+              progress: 0,
+              loaded: 0,
+              speed: 0,
+              error: undefined,
+              uploadId: undefined,
+              attachmentId: undefined,
+              abortController: undefined,
+            }
           : t
       ),
     }));
@@ -83,11 +95,14 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   cancelAll: () => {
     const state = get();
     state.tasks.forEach((t) => {
-      if (t.xhr) t.xhr.abort();
+      t.abortController?.abort();
+      if (t.uploadId) {
+        fetch(`/api/v1/uploads/${t.uploadId}`, { method: 'DELETE' }).catch(() => {});
+      }
     });
     set((s) => ({
       tasks: s.tasks.map((t) =>
-        t.status === 'uploading' || t.status === 'queued'
+        t.status === 'uploading' || t.status === 'queued' || t.status === 'encrypting'
           ? { ...t, status: 'cancelled' as const }
           : t
       ),
@@ -95,20 +110,17 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   },
 
   getActiveCount: () =>
-    get().tasks.filter((t) => t.status === 'uploading' || t.status === 'queued').length,
+    get().tasks.filter((t) => t.status === 'uploading' || t.status === 'queued' || t.status === 'encrypting').length,
 
   getUploadingCount: () =>
     get().tasks.filter((t) => t.status === 'uploading').length,
 
-  // Internal: process the upload queue
   processQueue: () => {
-    // This is set from outside by the upload manager hook
     const processFn = (useUploadStore as unknown as { __processFn?: () => void }).__processFn;
     if (processFn) processFn();
   },
 }));
 
-// Set the process function
 export function setUploadProcessFn(fn: () => void) {
   (useUploadStore as unknown as { __processFn?: () => void }).__processFn = fn;
 }

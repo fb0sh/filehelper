@@ -78,6 +78,57 @@
   line-height: 1.4;
 }
 
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eyeBtn {
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.warning {
+  color: var(--warning-color, #e6a23c);
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(230, 162, 60, 0.1);
+  border-radius: 8px;
+}
+
+.strengthHint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+
+  .strength-weak {
+    color: var(--danger-color);
+    font-weight: 600;
+  }
+
+  .strength-fair {
+    color: var(--warning-color, #e6a23c);
+    font-weight: 600;
+  }
+
+  .strength-strong {
+    color: var(--success-color, #4caf50);
+    font-weight: 600;
+  }
+}
+
 .error {
   color: var(--danger-color);
   font-size: 13px;
@@ -85,6 +136,50 @@
   padding: 8px 12px;
   background: rgba(var(--danger-color-rgb), 0.08);
   border-radius: 8px;
+}
+
+.createText {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.createActions {
+  display: flex;
+  gap: 12px;
+
+  .secondaryBtn,
+  .createBtn {
+    flex: 1;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+
+  .secondaryBtn {
+    background: var(--surface-alt, var(--border-color));
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+  }
+
+  .createBtn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+
+    &:hover {
+      opacity: 0.9;
+    }
+  }
 }
 
 .submitBtn {
@@ -108,10 +203,10 @@
     cursor: default;
   }
 }
-.hint {
+.footerHint {
   font-size: 13px;
   color: var(--text-secondary);
-  margin: -24px 0 24px;
+  margin-top: 24px;
   text-align: center;
   line-height: 1.5;
 }

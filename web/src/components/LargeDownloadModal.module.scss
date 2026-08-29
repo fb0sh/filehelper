@@ -1,0 +1,95 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.dialog {
+  background: var(--menu-background, var(--surface-color));
+  border-radius: 14px;
+  box-shadow: var(--shadow-heavy);
+  padding: 20px;
+  width: 100%;
+  max-width: 380px;
+  animation: scaleIn 0.15s ease-out;
+}
+
+.title {
+  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.cancelBtn,
+.confirmBtn {
+  padding: 9px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity var(--transition-fast);
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.cancelBtn {
+  background: var(--surface-alt, var(--border-color));
+  color: var(--text-primary);
+}
+
+.confirmBtn {
+  background: var(--primary-color);
+  color: white;
+
+  &.danger {
+    background: var(--danger-color);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay, .dialog {
+    animation: none;
+  }
+}
+
+.message p {
+  margin: 0 0 10px;
+}
+
+.file {
+  color: var(--text-primary);
+}

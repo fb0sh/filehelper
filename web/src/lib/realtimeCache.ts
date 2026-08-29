@@ -1,4 +1,4 @@
-import { Message, MessageListResponse } from '../api';
+import { EncryptedMessage, MessageListResponse } from '../api';
 
 // Shape of a TanStack Query infinite query cache entry for messages.
 export interface InfiniteMessages {
@@ -7,10 +7,10 @@ export interface InfiniteMessages {
 }
 
 // Prepend a realtime message to the newest page, skipping duplicates
-// (e.g. our own optimistic echo from the server broadcast).
+// (e.g. our own echo from the server broadcast).
 export function prependMessageDedupe(
   data: InfiniteMessages | undefined,
-  message: Message
+  message: EncryptedMessage
 ): InfiniteMessages | undefined {
   if (!data?.pages?.length) return data;
   const exists = data.pages.some((page) =>
@@ -36,11 +36,25 @@ export function removeMessageFromPages(
   };
 }
 
+export function removeMessagesFromPages(
+  data: InfiniteMessages | undefined,
+  ids: string[]
+): InfiniteMessages | undefined {
+  if (!data?.pages || ids.length === 0) return data;
+  const set = new Set(ids);
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      messages: page.messages.filter((m) => !set.has(m.id)),
+    })),
+  };
+}
+
 // Replace the whole cache with a context window around a jumped-to
 // message. Input must be old → new; pages are stored newest → oldest.
-// Preserves real time ordering in the rendered list.
 export function contextToInfiniteData(
-  messagesOldToNew: Message[],
+  messagesOldToNew: EncryptedMessage[],
   nextCursor: string | null
 ): InfiniteMessages {
   return {

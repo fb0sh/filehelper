@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, KeyboardEvent, ChangeEvent } from 'react
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { messagesApi, messageKeys } from '../../api';
 import { useUploadStore } from '../../stores/upload';
+import { encryptMessagePayload } from '../../lib/crypto/messages';
+import { loadCryptoSession } from '../../lib/crypto/session';
 import { Paperclip, Send } from 'lucide-react';
 import styles from './Composer.module.scss';
 
@@ -13,7 +15,16 @@ export function Composer() {
   const addTasks = useUploadStore((s) => s.addTasks);
 
   const sendMutation = useMutation({
-    mutationFn: (text: string) => messagesApi.create(text),
+    mutationFn: async (plaintext: string) => {
+      const session = loadCryptoSession();
+      if (!session) throw new Error('No crypto session');
+      // Encrypt locally; the server only ever stores the ciphertext.
+      const payload = encryptMessagePayload(session.messageKey, session.spaceId, {
+        type: 'text',
+        text: plaintext,
+      });
+      return messagesApi.create(payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
       queryClient.invalidateQueries({ queryKey: messageKeys.latest });

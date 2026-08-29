@@ -1,84 +1,75 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useUploadStore } from '../stores/upload';
+import { uploadsApi } from '../api/uploads';
+import { encryptMessagePayload, decryptEncryptedMessage } from '../lib/crypto/messages';
+import { bytesToBase64url } from '../lib/crypto/encoding';
+import { saveCryptoSession } from '../lib/crypto/session';
 
-describe('useUploadStore', () => {
+const KEY = bytesToBase64url(new Uint8Array(32).fill(5));
+
+describe('upload pipeline helpers', () => {
   beforeEach(() => {
+    sessionStorage.clear();
     useUploadStore.setState({ tasks: [] });
+    saveCryptoSession({
+      spaceId: 'space-up',
+      authKey: KEY,
+      messageKey: KEY,
+      fileMasterKey: KEY,
+      instanceId: 'inst',
+    });
   });
 
-  it('adds tasks from files', () => {
-    const file = new File([''], 'test.txt');
-    useUploadStore.getState().addTasks([file]);
-    expect(useUploadStore.getState().tasks).toHaveLength(1);
-    expect(useUploadStore.getState().tasks[0].file.name).toBe('test.txt');
-    expect(useUploadStore.getState().tasks[0].status).toBe('queued');
+  it('encrypts a file message payload that decrypts back with the metadata', () => {
+    const payload = encryptMessagePayload(KEY, 'space-up', {
+      type: 'file',
+      file: {
+        attachmentId: 'att-1',
+        filename: 'video.mp4',
+        mime: 'video/mp4',
+        size: 2_500_000_000,
+        sha256: 'c'.repeat(64),
+        chunkSize: 8 * 1024 * 1024,
+        noncePrefix: bytesToBase64url(new Uint8Array(16).fill(2)),
+        chunkCount: 299,
+      },
+    });
+    const outcome = decryptEncryptedMessage(KEY, 'space-up', {
+      id: 'm1',
+      payload,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      attachment: null,
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.message.attachment?.filename).toBe('video.mp4');
+      expect(outcome.message.attachment?.chunkCount).toBe(299);
+    }
   });
 
-  it('adds multiple files at once', () => {
-    const files = [
-      new File([''], 'a.txt'),
-      new File([''], 'b.txt'),
-      new File([''], 'c.txt'),
-    ];
-    useUploadStore.getState().addTasks(files);
-    expect(useUploadStore.getState().tasks).toHaveLength(3);
-    expect(useUploadStore.getState().tasks.every((t) => t.status === 'queued')).toBe(true);
+  it('uploadsApi.complete sends the opaque payload', async () => {
+    const fetchSpy = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'm-created', payload: 'FH1.xyz', createdAt: 'x', attachment: null }),
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await uploadsApi.complete('up-1', 'FH1.payload');
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(String(url)).toContain('/uploads/up-1/complete');
+    expect(JSON.parse(String(init?.body))).toEqual({ payload: 'FH1.payload' });
+    vi.unstubAllGlobals();
   });
 
-  it('updates a task', () => {
-    useUploadStore.getState().addTasks([new File(['x'], 'test.txt')]);
-    const id = useUploadStore.getState().tasks[0].id;
-    useUploadStore.getState().updateTask(id, { progress: 50, loaded: 50, status: 'uploading' });
-    const task = useUploadStore.getState().tasks[0];
-    expect(task.progress).toBe(50);
-    expect(task.loaded).toBe(50);
-    expect(task.status).toBe('uploading');
-  });
-
-  it('removes a task', () => {
-    useUploadStore.getState().addTasks([new File([''], 'test.txt')]);
-    const id = useUploadStore.getState().tasks[0].id;
-    useUploadStore.getState().removeTask(id);
-    expect(useUploadStore.getState().tasks).toHaveLength(0);
-  });
-
-  it('cancels a task', () => {
-    useUploadStore.getState().addTasks([new File([''], 'test.txt')]);
-    const id = useUploadStore.getState().tasks[0].id;
-    useUploadStore.getState().updateTask(id, { status: 'uploading' });
-    useUploadStore.getState().cancelTask(id);
-    expect(useUploadStore.getState().tasks[0].status).toBe('cancelled');
-  });
-
-  it('retries a failed task', () => {
-    useUploadStore.getState().addTasks([new File([''], 'test.txt')]);
-    const id = useUploadStore.getState().tasks[0].id;
-    useUploadStore.getState().updateTask(id, { status: 'failed', error: 'Network error' });
-    useUploadStore.getState().retryTask(id);
-    const task = useUploadStore.getState().tasks[0];
-    expect(task.status).toBe('queued');
-    expect(task.error).toBeUndefined();
-  });
-
-  it('counts active and uploading tasks', () => {
-    useUploadStore.getState().addTasks([
-      new File([''], 'a.txt'),
-      new File([''], 'b.txt'),
-    ]);
-    const [id1] = useUploadStore.getState().tasks.map((t) => t.id);
-    useUploadStore.getState().updateTask(id1, { status: 'uploading' });
-    expect(useUploadStore.getState().getActiveCount()).toBe(2);
-    expect(useUploadStore.getState().getUploadingCount()).toBe(1);
-  });
-
-  it('cancels all active tasks', () => {
-    useUploadStore.getState().addTasks([
-      new File([''], 'a.txt'),
-      new File([''], 'b.txt'),
-    ]);
-    const [id1] = useUploadStore.getState().tasks.map((t) => t.id);
-    useUploadStore.getState().updateTask(id1, { status: 'uploading' });
-    useUploadStore.getState().cancelAll();
-    expect(useUploadStore.getState().tasks.every((t) => t.status === 'cancelled')).toBe(true);
+  it('uploadsApi.chunk streams the ciphertext with an abort signal', async () => {
+    const fetchSpy = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 204 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const controller = new AbortController();
+    await uploadsApi.chunk('up-1', 3, new Uint8Array([1, 2, 3]), controller.signal);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(String(url)).toBe('/api/v1/uploads/up-1/chunks/3');
+    expect(init?.method).toBe('PUT');
+    expect(init?.signal).toBe(controller.signal);
+    vi.unstubAllGlobals();
   });
 });

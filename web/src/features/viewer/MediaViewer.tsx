@@ -29,7 +29,7 @@ export function MediaViewer({ url, filename, onClose }: Props) {
   }, []);
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
+    <div className={styles.overlay} onClick={onClose} data-viewer="">
       <div className={styles.header}>
         <span className={styles.filename}>{filename}</span>
         <div className={styles.actions}>

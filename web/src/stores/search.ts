@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { Message } from '../api';
+import type { DecryptedMessage } from '../lib/crypto/messages';
 
 interface JumpRequest {
-  message: Message;
+  message: DecryptedMessage;
   nonce: number;
 }
 
@@ -12,7 +12,7 @@ interface SearchState {
   jumpRequest: JumpRequest | null;
   setOpen: (open: boolean) => void;
   setQuery: (query: string) => void;
-  requestJump: (message: Message) => void;
+  requestJump: (message: DecryptedMessage) => void;
   clearJump: () => void;
 }
 
