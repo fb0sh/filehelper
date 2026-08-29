@@ -36,4 +36,5 @@ export const messagesApi = {
     headers: { 'Content-Type': 'application/json' },
   }),
   delete: (id: string) => request<void>(`/messages/${id}`, { method: 'DELETE' }),
+  get: (id: string) => request<Message>(`/messages/${id}`),
 };

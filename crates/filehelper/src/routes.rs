@@ -8,7 +8,7 @@ mod uploads;
 use crate::state::AppState;
 use axum::{
     Router, middleware,
-    routing::{delete, get, post},
+    routing::{get, post},
 };
 
 pub fn build_router(state: AppState) -> Router {
@@ -21,7 +21,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/session", get(auth::session))
         .route("/messages", get(messages::list).post(messages::create))
-        .route("/messages/{id}", delete(messages::delete))
+        .route(
+            "/messages/{id}",
+            get(messages::get).delete(messages::delete),
+        )
         .route("/uploads", post(uploads::upload))
         .route("/files/{id}/content", get(files::content))
         .route("/files/{id}/download", get(files::download))

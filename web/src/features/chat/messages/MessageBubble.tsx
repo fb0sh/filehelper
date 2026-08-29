@@ -1,5 +1,6 @@
 import { useState, MouseEvent } from 'react';
-import { Message } from '../../../api';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Message, messagesApi } from '../../../api';
 import { TextMessage } from './TextMessage';
 import { FileMessage } from './FileMessage';
 import { ImageMessage } from './ImageMessage';
@@ -14,6 +15,14 @@ interface Props {
 
 export function MessageBubble({ message }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => messagesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+    },
+  });
 
   const handleContextMenu = (e: MouseEvent) => {
     e.preventDefault();
@@ -28,6 +37,12 @@ export function MessageBubble({ message }: Props) {
     }
   };
 
+  const handleDownload = () => {
+    const att = message.attachment;
+    if (!att) return;
+    window.open(att.downloadUrl, '_blank');
+  };
+
   const handleSaveAs = () => {
     const att = message.attachment;
     if (!att) return;
@@ -39,14 +54,23 @@ export function MessageBubble({ message }: Props) {
     document.body.removeChild(a);
   };
 
+  const handleDelete = () => {
+    if (window.confirm('Delete this message?')) {
+      deleteMutation.mutate(message.id);
+    }
+  };
+
   const menuItems = [];
   if (message.text) {
     menuItems.push({ label: 'Copy', onClick: handleCopy });
+  } else if (message.attachment) {
+    menuItems.push({ label: 'Copy filename', onClick: handleCopy });
   }
   if (message.attachment) {
-    menuItems.push({ label: 'Copy filename', onClick: handleCopy });
+    menuItems.push({ label: 'Download', onClick: handleDownload });
     menuItems.push({ label: 'Save as', onClick: handleSaveAs });
   }
+  menuItems.push({ label: 'Delete', onClick: handleDelete });
 
   const renderContent = () => {
     switch (message.kind) {

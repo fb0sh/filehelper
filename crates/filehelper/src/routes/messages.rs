@@ -66,3 +66,13 @@ pub async fn delete(
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
+
+pub async fn get(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<db::Message>, AppError> {
+    let message = db::get_message(&state.db, &id)
+        .await?
+        .ok_or(AppError::MessageNotFound)?;
+    Ok(Json(message))
+}

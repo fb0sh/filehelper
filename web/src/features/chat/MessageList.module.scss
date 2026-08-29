@@ -26,3 +26,8 @@
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+.highlighted {
+  animation: highlightFlash 2s ease-out;
+  border-radius: 12px;
+}

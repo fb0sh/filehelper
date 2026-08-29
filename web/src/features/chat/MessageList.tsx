@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { messagesApi, Message } from '../../api';
 import { useUploadStore } from '../../stores/upload';
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { MessageBubble } from './messages/MessageBubble';
 import { UploadMessage } from './messages/UploadMessage';
 import { DateSeparator } from './DateSeparator';
@@ -9,16 +9,23 @@ import { ScrollToBottom } from './ScrollToBottom';
 import { formatDateSeparator } from '../../lib/dates';
 import styles from './MessageList.module.scss';
 
-export function MessageList() {
+export interface MessageListHandle {
+  jumpToMessage: (msg: Message) => void;
+}
+
+export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevScrollHeight = useRef(0);
   const isLoadingMore = useRef(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const uploadTasks = useUploadStore((s) => s.tasks);
   const cancelTask = useUploadStore((s) => s.cancelTask);
   const retryTask = useUploadStore((s) => s.retryTask);
+  const queryClient = useQueryClient();
 
   const activeTasks = uploadTasks.filter(
     (t) => t.status === 'uploading' || t.status === 'queued' || t.status === 'failed' || t.status === 'cancelled'
@@ -72,6 +79,33 @@ export function MessageList() {
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  useImperativeHandle(ref, () => ({
+    jumpToMessage: async (msg: Message) => {
+      // If message is already in the list, scroll to it
+      const exists = messages.some((m) => m.id === msg.id);
+      if (!exists) {
+        // Insert it into the first page of the cache
+        queryClient.setQueryData(['messages'], (old: any) => {
+          if (!old?.pages || old.pages.length === 0) return old;
+          const pages = [...old.pages];
+          const firstPage = { ...pages[0], messages: [msg, ...(pages[0]?.messages || [])] };
+          pages[0] = firstPage;
+          return { ...old, pages };
+        });
+        // Wait for re-render
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      // Find the DOM element and scroll to it
+      const el = containerRef.current?.querySelector(`[data-message-id="${msg.id}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      setHighlightId(msg.id);
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      highlightTimer.current = setTimeout(() => setHighlightId(null), 2000);
+    },
+  }));
+
   const grouped = groupByDate(messages);
   const isNearBottom = useCallback(() => {
     const c = containerRef.current;
@@ -93,11 +127,16 @@ export function MessageList() {
           <div key={gi}>
             <DateSeparator date={group.date} />
             {group.messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <div
+                key={msg.id}
+                data-message-id={msg.id}
+                className={highlightId === msg.id ? styles.highlighted : undefined}
+              >
+                <MessageBubble message={msg} />
+              </div>
             ))}
           </div>
         ))}
-        {/* Upload progress bubbles */}
         {activeTasks.map((task) => (
           <div key={task.id} style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 8px' }}>
             <UploadMessage
@@ -118,7 +157,9 @@ export function MessageList() {
       />
     </div>
   );
-}
+});
+
+MessageList.displayName = 'MessageList';
 
 function groupByDate(messages: Message[]): { date: string; messages: Message[] }[] {
   const groups: { date: string; messages: Message[] }[] = [];

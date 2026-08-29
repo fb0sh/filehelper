@@ -2,15 +2,13 @@ import { useState, useRef, useCallback, KeyboardEvent, ChangeEvent } from 'react
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { messagesApi } from '../../api';
 import { useUploadStore } from '../../stores/upload';
-import { Paperclip, Send, Image, File } from 'lucide-react';
+import { Paperclip, Send } from 'lucide-react';
 import styles from './Composer.module.scss';
 
 export function Composer() {
   const [text, setText] = useState('');
-  const [popoverOpen, setPopoverOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const addTasks = useUploadStore((s) => s.addTasks);
 
@@ -67,7 +65,6 @@ export function Composer() {
       addTasks(Array.from(files));
     }
     e.target.value = '';
-    setPopoverOpen(false);
   };
 
   return (
@@ -86,45 +83,14 @@ export function Composer() {
           />
         </div>
 
-        <div className={styles.attachWrapper}>
-          <button
-            className={styles.iconBtn}
-            onClick={() => setPopoverOpen(!popoverOpen)}
-            aria-label="Attach"
-          >
-            <Paperclip size={22} />
-          </button>
-          {popoverOpen && (
-            <>
-              <div className={styles.popoverOverlay} onClick={() => setPopoverOpen(false)} />
-              <div className={styles.popover}>
-                <button
-                  className={styles.popoverItem}
-                  onClick={() => imageInputRef.current?.click()}
-                >
-                  <Image size={20} />
-                  <span>Photo or Video</span>
-                </button>
-                <button
-                  className={styles.popoverItem}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <File size={20} />
-                  <span>File</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <button
+          className={styles.iconBtn}
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Attach file"
+        >
+          <Paperclip size={22} />
+        </button>
 
-        <input
-          ref={imageInputRef}
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
         <input
           ref={fileInputRef}
           type="file"
