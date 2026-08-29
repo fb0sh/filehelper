@@ -4,6 +4,10 @@ use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
 #[folder = "../../web/dist"]
+// Embed assets deflate-compressed → smaller binary. get() decompresses on
+// the fly, so serve_static below is unchanged; hashed assets are served
+// with immutable caching, so decompression happens once per asset.
+#[compression = "deflate"]
 pub struct WebAssets;
 
 /// Content-Security-Policy for the SPA. Blob workers and blob images are

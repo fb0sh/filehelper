@@ -3,6 +3,9 @@ target/
 web/dist/
 web/node_modules/
 
+# Local dev-tool index (not project source)
+.codegraph/
+
 # Data
 data/
 test-data/
