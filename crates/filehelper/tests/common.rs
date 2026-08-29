@@ -21,6 +21,7 @@ pub fn app_config(data_dir: PathBuf) -> Config {
         data_dir: Some(data_dir),
         ephemeral: false,
         max_upload_size: 64 * 1024 * 1024,
+        no_tls: true, // tests never serve TLS
     }
 }
 

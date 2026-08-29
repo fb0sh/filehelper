@@ -56,6 +56,15 @@ pub struct Config {
     /// matching ciphertext bound including AEAD overhead)
     #[arg(long, default_value = "10737418240")]
     pub max_upload_size: u64,
+
+    /// Disable HTTPS and serve plain HTTP instead. HTTPS is the default:
+    /// it makes the browser treat the origin as a secure context, which
+    /// unlocks the native OS "Save as" file dialog (showSaveFilePicker)
+    /// over the LAN — plain HTTP cannot expose it. HTTPS uses an
+    /// auto-generated self-signed certificate (accept the one-time
+    /// browser warning).
+    #[arg(long)]
+    pub no_tls: bool,
 }
 
 impl Config {

@@ -36,22 +36,77 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()
         .map_err(|e| format!("Invalid address: {e}"))?;
 
-    print_startup(&app, &addr);
+    // HTTPS is the default (secure context ⇒ native Save-as dialog);
+    // --no-tls opts back into plain LAN HTTP.
+    let tls = !config.no_tls;
+    print_startup(&app, &addr, tls);
 
     let router = app.router().fallback(axum::routing::get(serve_spa));
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(
-        listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    let service = router.into_make_service_with_connect_info::<SocketAddr>();
+
+    if tls {
+        // HTTPS with an auto-generated self-signed certificate. The
+        // browser treats https origins as secure contexts, which exposes
+        // showSaveFilePicker — the native OS "Save as" dialog. Plain LAN
+        // HTTP cannot offer it (browser platform rule).
+        let certified = generate_cert()?;
+        let tls = axum_server::tls_rustls::RustlsConfig::from_pem(
+            certified.cert_pem.into_bytes(),
+            certified.key_pem.into_bytes(),
+        )
+        .await?;
+        let handle = axum_server::Handle::new();
+        let h = handle.clone();
+        tokio::spawn(async move {
+            shutdown_signal().await;
+            h.graceful_shutdown(None);
+        });
+        axum_server::bind_rustls(addr, tls)
+            .handle(handle)
+            .serve(service)
+            .await?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        axum::serve(listener, service)
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
+    }
 
     app.shutdown().await;
     Ok(())
 }
 
-fn print_startup(app: &App, addr: &SocketAddr) {
+struct CertifiedPem {
+    cert_pem: String,
+    key_pem: String,
+}
+
+/// Self-signed ECDSA certificate covering localhost + every LAN IPv4, so
+/// both local and remote access get a (bypassable) browser warning and,
+/// once accepted, a secure context. Regenerated on every launch.
+fn generate_cert() -> Result<CertifiedPem, Box<dyn std::error::Error>> {
+    use rcgen::string::Ia5String;
+    use rcgen::{CertificateParams, KeyPair, SanType};
+    use std::net::{IpAddr, Ipv4Addr};
+
+    let mut params = CertificateParams::default();
+    params.subject_alt_names = vec![
+        SanType::DnsName(Ia5String::try_from("localhost")?),
+        SanType::IpAddress(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+    ];
+    for ip in lan_ipv4() {
+        params.subject_alt_names.push(SanType::IpAddress(ip));
+    }
+    let key_pair = KeyPair::generate()?;
+    let cert = params.self_signed(&key_pair)?;
+    Ok(CertifiedPem {
+        cert_pem: cert.pem(),
+        key_pem: key_pair.serialize_pem(),
+    })
+}
+
+fn print_startup(app: &App, addr: &SocketAddr, tls: bool) {
+    let scheme = if tls { "https" } else { "http" };
     println!("FileHelper {}", env!("CARGO_PKG_VERSION"));
     if app.ephemeral {
         println!("(ephemeral mode — data removed on exit)");
@@ -60,14 +115,25 @@ fn print_startup(app: &App, addr: &SocketAddr) {
     println!("Open:");
     if addr.ip().is_unspecified() {
         for ip in lan_ipv4() {
-            println!("  http://{ip}:{}", addr.port());
+            println!("  {scheme}://{ip}:{}", addr.port());
         }
     } else {
-        println!("  http://{addr}");
+        println!("  {scheme}://{addr}");
     }
     println!("Data:  {}", app.data_dir.display());
-    println!("Security:  End-to-end encrypted content  LAN HTTP mode");
-    println!("Use on trusted networks.");
+    if tls {
+        println!(
+            "TLS:   HTTPS default — self-signed certificate (accept the browser warning once)"
+        );
+        println!(
+            "       enables the native OS Save-as dialog over LAN; use --no-tls for plain HTTP"
+        );
+    } else {
+        println!(
+            "Security:  End-to-end encrypted content  LAN HTTP mode (HTTPS disabled via --no-tls)"
+        );
+        println!("Use on trusted networks.");
+    }
     println!();
     println!("Press Ctrl+C to stop.");
 }

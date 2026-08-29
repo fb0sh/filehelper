@@ -181,6 +181,41 @@ test.describe('FileHelper v2.0 E2E', () => {
     await server.stop();
   });
 
+  test('https (--tls): secure context over LAN — native Save-as dialog API is exposed', async ({ browser }) => {
+    const server = await startServer({ tls: true });
+    const base = `https://127.0.0.1:${server.port}`;
+    const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
+    const page = await ctx.newPage();
+    await login(page, base, uniqueCode('tls'));
+    await sendText(page, 'tls-works');
+
+    // Over https the origin is a secure context, so Chromium exposes
+    // showSaveFilePicker — the OS "Save as" folder dialog. Plain LAN
+    // http never has it (browser platform rule); --tls restores it.
+    const api = await page.evaluate(() => ({
+      hasPicker: typeof (window as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function',
+      isSecure: window.isSecureContext,
+    }));
+    expect(api.isSecure).toBe(true);
+    expect(api.hasPicker).toBe(true);
+
+    // The upload flow works over https too (wss realtime).
+    const before = await page.locator('div[data-message-id]').count();
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'tls-upload.bin',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('secure-context-upload'),
+    });
+    await page.locator('button[aria-label="Send file"]').click();
+    await page.waitForFunction(
+      (n) => document.querySelectorAll('div[data-message-id]').length > n,
+      before,
+      { timeout: 20000 }
+    );
+    await ctx.close();
+    await server.stop();
+  });
+
   test('upload works without crypto.randomUUID (LAN HTTP has no secure context)', async ({ page }) => {
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;

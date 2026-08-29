@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
+import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -14,6 +15,7 @@ export interface ServerOptions {
   dataDir?: string;
   ephemeral?: boolean;
   port?: number;
+  tls?: boolean;
 }
 
 export interface ServerHandle {
@@ -32,11 +34,13 @@ export async function startServer(opts: ServerOptions = {}): Promise<ServerHandl
 
   const args = ['--addr', `127.0.0.1:${port}`, '--data-dir', dataDir];
   if (opts.ephemeral) args.push('--ephemeral');
+  // HTTPS is the default; the plain-HTTP tests opt out explicitly.
+  if (!opts.tls) args.push('--no-tls');
 
   const proc = spawn(BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   proc.stderr?.on('data', () => {});
 
-  await waitForReady(port, proc);
+  await waitForReady(port, proc, opts.tls);
   return {
     port,
     dataDir,
@@ -44,7 +48,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<ServerHandl
   };
 }
 
-function waitForReady(port: number, proc: ChildProcess): Promise<void> {
+function waitForReady(port: number, proc: ChildProcess, tls = false): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + 15000;
     const timer = setInterval(async () => {
@@ -54,10 +58,37 @@ function waitForReady(port: number, proc: ChildProcess): Promise<void> {
         return;
       }
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/api/v1/info`);
-        if (res.ok) {
-          clearInterval(timer);
-          resolve();
+        if (tls) {
+          // Self-signed cert — probe with validation disabled.
+          const ok = await new Promise<boolean>((res) => {
+            const req = https.get(
+              {
+                host: '127.0.0.1',
+                port,
+                path: '/api/v1/info',
+                rejectUnauthorized: false,
+                timeout: 2000,
+              },
+              (r) => res(r.statusCode === 200)
+            );
+            req.on('error', () => res(false));
+            req.on('timeout', () => {
+              req.destroy();
+              res(false);
+            });
+          });
+          if (ok) {
+            clearInterval(timer);
+            resolve();
+            return;
+          }
+        } else {
+          const res = await fetch(`http://127.0.0.1:${port}/api/v1/info`);
+          if (res.ok) {
+            clearInterval(timer);
+            resolve();
+            return;
+          }
         }
       } catch {
         // not up yet

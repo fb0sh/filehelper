@@ -3,6 +3,26 @@
 All notable changes to FileHelper are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## 2.0.5 — 2026-08-30
+
+### Features
+
+- **HTTPS by default — native OS "Save as" dialog over the LAN.**
+  Browsers only expose the save-file picker (`showSaveFilePicker`) in
+  secure contexts (localhost / HTTPS) — over plain LAN HTTP no application
+  can show the system folder dialog. FileHelper now serves HTTPS with an
+  auto-generated self-signed certificate (regenerated each launch,
+  covering localhost + LAN IPv4s), so "Save as…" opens the real OS
+  file-save dialog from any device out of the box. `--no-tls` opts back
+  into plain LAN HTTP. The WebSocket client automatically uses `wss://`.
+
+### Fixes
+
+- The "Save as…" menu item is always shown for attachments; without the
+  picker (plain HTTP / non-Chromium) it falls back to the standard
+  download flow. Picker and fallback paths are covered by unit tests, and
+  an e2e test proves `showSaveFilePicker` is exposed over `--tls`.
+
 ## 2.0.4 — 2026-08-30
 
 ### Fixes

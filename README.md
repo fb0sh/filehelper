@@ -126,12 +126,25 @@ end-to-end encrypted demo data.
 ## Modes
 
 ```bash
-# Default: keeps your data, same space for the same code
+# Default: HTTPS with an auto-generated self-signed certificate, keeps
+# your data (same space for the same code). HTTPS makes the browser
+# treat the origin as a secure context, which unlocks the native OS
+# "Save as" file dialog (showSaveFilePicker) over the LAN. Accept the
+# one-time browser warning about the self-signed certificate.
 ./filehelper
 
 # One-shot run — OS temp data dir, fresh instance, removed on exit
 ./filehelper --ephemeral
+
+# Plain LAN HTTP (no native Save-as dialog in Chromium without HTTPS)
+./filehelper --no-tls
 ```
+
+> Why HTTPS by default? Browsers only expose the native save-file picker
+> in secure contexts (localhost / HTTPS). Over plain LAN HTTP the OS
+> "Save as" dialog is impossible for any application — HTTPS makes it
+> available. The self-signed certificate is regenerated on every launch
+> and covers localhost plus all detected LAN IPv4 addresses.
 
 ## Usage
 
