@@ -27,7 +27,10 @@
   --overlay-background: rgba(0, 0, 0, 0.4);
 
   // ── Telegram Web K shell tokens ─────────────────────────────
-  --sidebar-width: 430px;
+  // Sidebar island width: 29% of the total window width (Telegram's
+  // left-column ratio), clamped so small desktops keep a usable list
+  // and ultra-wide screens don't balloon.
+  --sidebar-width: clamp(330px, 29vw, 520px);
   --tg-content-width: 840px;
   --tg-message-width: 800px;
   --tg-chat-gutter: 16px;

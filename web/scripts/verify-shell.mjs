@@ -170,13 +170,13 @@ check('chat content column has no shadow (no panel)', styles.chatShadow === 'non
 check('sidebar card is white', near(hexToRgb(styles.sidebarBg), white), styles.sidebarBg);
 check('sidebar radius 28px', styles.sidebarRadius === '28px', styles.sidebarRadius);
 check('sidebar casts shadow', /rgba/.test(styles.sidebarShadow), styles.sidebarShadow.slice(0, 60));
-check('sidebar card at 12,12 size 430×936 (floating island)',
+check('sidebar card at 12,12 ≈29% wide × 936 (floating island)',
   styles.sidebarRect.x === 12 && styles.sidebarRect.y === 12 &&
-  Math.round(styles.sidebarRect.w) === 430 && Math.round(styles.sidebarRect.h) === 936,
+  Math.round(styles.sidebarRect.w) === 459 && Math.round(styles.sidebarRect.h) === 936,
   JSON.stringify(styles.sidebarRect));
-check('chat column at 454,12 size 1118×936',
-  styles.chatRect.x === 454 && styles.chatRect.y === 12 &&
-  Math.round(styles.chatRect.w) === 1118 && Math.round(styles.chatRect.h) === 936,
+check('chat column at 483,12 size 1089×936',
+  Math.round(styles.chatRect.x) === 483 && Math.round(styles.chatRect.y) === 12 &&
+  Math.round(styles.chatRect.w) === 1089 && Math.round(styles.chatRect.h) === 936,
   JSON.stringify(styles.chatRect));
 
 // ── Rendered pixels ───────────────────────────────────────────
@@ -186,11 +186,17 @@ const img = decodePng(shot);
 // shell corner: outside the rounded app-shell → window bg
 check('viewport corner shows window bg', near(pix(img, 3, 3), windowBg), pix(img, 3, 3).join(','));
 // ── Wallpaper is continuous across the WHOLE shell ──
-// top padding ring (y=6), left ring (x=6), sidebar↔chat gap, right area
+// Derive probe points from the measured rects so width changes never
+// break the checks: the gap = middle of (card right → chat left), the
+// ring = left of the card, plus fixed probes in the chat area.
+const sr = styles.sidebarRect;
+const cr = styles.chatRect;
+const gapX = Math.round((sr.x + sr.w + cr.x) / 2); // between card and chat
+const ringX = sr.x - 6; // shell padding ring, left of the card
 for (const [label, x, y] of [
   ['top ring (above sidebar)', 200, 6],
-  ['left ring (left of card)', 6, 480],
-  ['sidebar↔chat gap', 448, 500],
+  ['left ring (left of card)', ringX, 480],
+  ['sidebar↔chat gap', gapX, 500],
   ['chat area', 1200, 500],
   ['far right', 1560, 300],
 ]) {
@@ -205,7 +211,7 @@ check('sidebar corner is rounded (px at card corner = wallpaper)',
 check('sidebar interior below row is white', near(boxMedian(410, 260), white, 10), boxMedian(410, 260).join(','));
 check('sidebar whitespace right of row is white', near(boxMedian(415, 300), white, 10), boxMedian(415, 300).join(','));
 // card right edge: 1px past the card is wallpaper, not gray
-check('right of card is wallpaper', greenFamily(boxMedian(444, 500)), boxMedian(444, 500).join(','));
+check('right of card is wallpaper', greenFamily(boxMedian(Math.round(sr.x + sr.w) + 1, 500)), boxMedian(Math.round(sr.x + sr.w) + 1, 500).join(','));
 
 // ── Gradient color field: four regions olive-family, top-left brighter ──
 const gTL = boxMedian(520, 60);
@@ -221,11 +227,14 @@ check('gradient: bottom-right deeper than top-left',
   `tl=${lum(gTL)} br=${lum(gBR)}`);
 
 // ── FAB: blue circle bottom-right of the sidebar card ──
-// card right edge 442, bottom 948 → center (442-16-27, 948-16-27)=(399,905)
+// center = (cardRight-16-27, cardBottom-16-27); scan a 30×30 box and
+// require mostly primary blue (the white pencil icon sits at center).
+const fabCx = Math.round(sr.x + sr.w) - 16 - 27;
+const fabCy = Math.round(sr.y + sr.h) - 16 - 27;
 let blueHits = 0;
 let fabTotal = 0;
-for (let y = 890; y <= 920; y += 2) {
-  for (let x = 374; x <= 404; x += 2) {
+for (let y = fabCy - 15; y <= fabCy + 15; y += 2) {
+  for (let x = fabCx - 15; x <= fabCx + 15; x += 2) {
     fabTotal++;
     if (near(pix(img, x, y), [51, 144, 236], 14)) blueHits++;
   }

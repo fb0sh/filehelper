@@ -726,7 +726,7 @@ test.describe('FileHelper v2.0 E2E', () => {
     }
   });
 
-  test('lock: returns to Enter Code, re-login restores history; About shows 2.0.0', async ({ page }) => {
+  test('lock: returns to Enter Code, re-login restores history; About shows the server version', async ({ page }) => {
     await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
@@ -735,10 +735,11 @@ test.describe('FileHelper v2.0 E2E', () => {
     const msg = `locked-msg-${Date.now()}`;
     await sendText(page, msg);
 
-    // About → version comes from the server info endpoint.
+    // About → version comes from the server info endpoint (never hardcode).
+    const info = await (await fetch(`${base}/api/v1/info`)).json();
     await page.click('button[aria-label="Open menu"]');
     await page.locator('div[class*="menu"] button', { hasText: 'About' }).click();
-    await expect(page.locator('text=Version 2.0.0').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(`text=Version ${info.version}`).first()).toBeVisible({ timeout: 5000 });
     await page.keyboard.press('Escape');
 
     // Lock → back to the CODE prompt.

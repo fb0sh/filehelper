@@ -3,6 +3,15 @@
 All notable changes to FileHelper are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## 2.0.2 — 2026-08-30
+
+### Changes
+
+- **Sidebar width is now proportional** — the floating sidebar card is 29%
+  of the total window width (`clamp(330px, 29vw, 520px)`), matching the
+  Telegram left-column ratio instead of a fixed 430px. All desktop
+  screenshots regenerated.
+
 ## 2.0.1 — 2026-08-30
 
 ### Fixes

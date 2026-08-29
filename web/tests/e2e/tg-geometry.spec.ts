@@ -149,13 +149,14 @@ test.describe('TG pixel-match geometry', () => {
 
     const { h, r, c, s, ch } = await boxes(page);
 
-    // ── Shell: 12px outer gutter, rounded panes, no page scrollbar ──
+    // ── Shell: 12px outer gutter, sidebar = 29% of window (459.4px at
+    //    1584), no page scrollbar ──
     expect(s.x).toBeCloseTo(12, 0);
     expect(s.y).toBeCloseTo(12, 0);
-    expect(s.width).toBeCloseTo(430, 1);
+    expect(s.width).toBeCloseTo(459.4, 1);
     expect(s.height).toBeCloseTo(936, 1);
-    expect(ch.x).toBeCloseTo(454, 0);
-    expect(ch.width).toBeCloseTo(1118, 1);
+    expect(ch.x).toBeCloseTo(483.4, 0);
+    expect(ch.width).toBeCloseTo(1088.6, 1);
 
     // ── Floating header pill ──
     expect(h.height).toBeCloseTo(56, 1);
@@ -172,7 +173,7 @@ test.describe('TG pixel-match geometry', () => {
 
     // ── Centered message rail ──
     expect(r.width).toBeCloseTo(800, 1);
-    expect(r.x).toBeCloseTo(613, 1);
+    expect(r.x).toBeCloseTo(627.7, 1);
 
     // ── Shared center axis: header == rail == composer (±1px) ──
     const hcx = h.x + h.width / 2;
@@ -385,10 +386,11 @@ test.describe('TG pixel-match geometry', () => {
     await sendText(page, 'small viewport probe');
 
     const { h, r, c, ch } = await boxes(page);
-    // chat width = 1280 - 24 - 430 - 12 = 814; pill width = min(840, 782) = 782
-    expect(h.width).toBeCloseTo(782, 1);
-    expect(c.width).toBeCloseTo(782, 1);
-    expect(r.width).toBeCloseTo(782, 1);
+    // sidebar = 29% of 1280 = 371.2; chat width = 1280 - 24 - 371.2 - 12 =
+    // 872.8; pills hit the 840 cap (872.8-32 = 840.8 > 840)
+    expect(h.width).toBeCloseTo(840, 1);
+    expect(c.width).toBeCloseTo(840, 1);
+    expect(r.width).toBeCloseTo(800, 1);
     expect(Math.abs(h.x + h.width / 2 - (ch.x + ch.width / 2))).toBeLessThanOrEqual(1);
     expect(Math.abs(r.x + r.width / 2 - (ch.x + ch.width / 2))).toBeLessThanOrEqual(1);
     expect(Math.abs(c.x + c.width / 2 - (ch.x + ch.width / 2))).toBeLessThanOrEqual(1);
