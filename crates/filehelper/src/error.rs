@@ -8,16 +8,30 @@ use serde::Serialize;
 pub enum AppError {
     #[error("Authentication required")]
     AuthRequired,
-    #[error("Invalid access code")]
-    InvalidPassword,
+    #[error("Invalid credentials")]
+    AuthFailed,
+    #[error("No data found for this code")]
+    SpaceNotFound,
+    #[error("Space already exists")]
+    SpaceExists,
+    #[error("Session expired")]
+    SessionExpired,
     #[error("Message not found")]
     MessageNotFound,
     #[error("File not found")]
     FileNotFound,
+    #[error("Upload not found")]
+    UploadNotFound,
+    #[error("Upload chunks must arrive in order")]
+    UploadChunkOrder,
     #[error("Upload too large")]
     UploadTooLarge,
+    #[error("Payload too large")]
+    PayloadTooLarge,
     #[error("Invalid upload")]
     InvalidUpload,
+    #[error("Bad request")]
+    BadRequest,
     #[error("Rate limited")]
     RateLimited,
     #[error("Internal error: {0}")]
@@ -28,11 +42,18 @@ impl AppError {
     fn code(&self) -> &'static str {
         match self {
             AppError::AuthRequired => "AUTH_REQUIRED",
-            AppError::InvalidPassword => "INVALID_PASSWORD",
+            AppError::AuthFailed => "AUTH_FAILED",
+            AppError::SpaceNotFound => "SPACE_NOT_FOUND",
+            AppError::SpaceExists => "SPACE_EXISTS",
+            AppError::SessionExpired => "SESSION_EXPIRED",
             AppError::MessageNotFound => "MESSAGE_NOT_FOUND",
             AppError::FileNotFound => "FILE_NOT_FOUND",
+            AppError::UploadNotFound => "UPLOAD_NOT_FOUND",
+            AppError::UploadChunkOrder => "UPLOAD_CHUNK_ORDER",
             AppError::UploadTooLarge => "UPLOAD_TOO_LARGE",
+            AppError::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             AppError::InvalidUpload => "INVALID_UPLOAD",
+            AppError::BadRequest => "BAD_REQUEST",
             AppError::RateLimited => "RATE_LIMITED",
             AppError::Internal(_) => "INTERNAL_ERROR",
         }
@@ -40,10 +61,16 @@ impl AppError {
 
     fn status(&self) -> StatusCode {
         match self {
-            AppError::AuthRequired | AppError::InvalidPassword => StatusCode::UNAUTHORIZED,
+            AppError::AuthRequired | AppError::AuthFailed => StatusCode::UNAUTHORIZED,
+            AppError::SessionExpired => StatusCode::UNAUTHORIZED,
+            AppError::SpaceNotFound => StatusCode::NOT_FOUND,
+            AppError::SpaceExists => StatusCode::CONFLICT,
             AppError::MessageNotFound | AppError::FileNotFound => StatusCode::NOT_FOUND,
-            AppError::UploadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            AppError::InvalidUpload => StatusCode::BAD_REQUEST,
+            AppError::UploadNotFound => StatusCode::NOT_FOUND,
+            AppError::UploadChunkOrder | AppError::InvalidUpload | AppError::BadRequest => {
+                StatusCode::BAD_REQUEST
+            }
+            AppError::UploadTooLarge | AppError::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             AppError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -88,16 +115,8 @@ impl From<std::io::Error> for AppError {
     }
 }
 
-impl From<argon2::password_hash::Error> for AppError {
-    fn from(e: argon2::password_hash::Error) -> Self {
-        tracing::error!("Password hash error: {e}");
-        AppError::Internal(anyhow::anyhow!("Password hash error"))
-    }
-}
-
-impl From<axum::extract::multipart::MultipartError> for AppError {
-    fn from(e: axum::extract::multipart::MultipartError) -> Self {
-        tracing::error!("Multipart error: {e}");
-        AppError::InvalidUpload
+impl From<axum::extract::rejection::JsonRejection> for AppError {
+    fn from(_: axum::extract::rejection::JsonRejection) -> Self {
+        AppError::BadRequest
     }
 }

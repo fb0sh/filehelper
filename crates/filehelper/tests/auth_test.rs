@@ -1,438 +1,362 @@
+use filehelper::auth::session;
+use std::path::PathBuf;
+
 mod common;
+use common::*;
 
-use common::{
-    app_config, cleanup, cookie_from_response, file_part, json_request, login, multipart_body,
-    multipart_request, temp_dir,
-};
-use filehelper::app::App;
-use filehelper::config::Config;
-use tower::ServiceExt;
-
-async fn get(app: &App, uri: &str, cookie: Option<&str>) -> axum::response::Response {
-    let mut builder = axum::http::Request::builder().method("GET").uri(uri);
-    if let Some(c) = cookie {
-        builder = builder.header("cookie", c);
-    }
-    app.router()
-        .oneshot(builder.body(axum::body::Body::empty()).unwrap())
-        .await
-        .unwrap()
-}
-
-fn token(cookie: &str) -> String {
-    cookie.split(';').next().unwrap_or("").to_string()
+fn auth_body(space_id: &str, auth_key: &str) -> String {
+    format!("{{\"spaceId\":\"{space_id}\",\"authKey\":\"{auth_key}\"}}")
 }
 
 #[tokio::test]
-async fn fresh_run_creates_data_directory() {
-    let dir = temp_dir("fh-datadir");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    assert!(dir.exists(), "data dir must be created");
-    assert!(dir.join("files").exists());
-    assert!(dir.join("filehelper.db").exists());
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn fresh_run_creates_access_code() {
-    let dir = temp_dir("fh-freshcode");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let code = app.access_code.clone().unwrap();
-    assert_eq!(code.len(), 6);
-    assert!(code.chars().all(|c| c.is_ascii_digit()));
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn second_run_changes_access_code() {
-    let dir = temp_dir("fh-restorecode");
-    let cfg = app_config(dir.clone());
-    let app1 = App::start(&cfg).await.unwrap();
-    let code1 = app1.access_code.clone().unwrap();
-    app1.shutdown().await;
-
-    // Default behavior: every start gets a fresh access code.
-    let app2 = App::start(&cfg).await.unwrap();
-    let code2 = app2.access_code.clone().unwrap();
-    assert_ne!(code1, code2, "restart must generate a new access code");
-    app2.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn second_run_restores_messages() {
-    let dir = temp_dir("fh-restoremsg");
-    let cfg = app_config(dir.clone());
-    let app1 = App::start(&cfg).await.unwrap();
-    let code = app1.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app1, &code).await));
+async fn login_unknown_space_returns_space_not_found() {
+    let dir = temp_dir("auth-unknown");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
     let res = json_request(
-        &app1,
+        &app,
         "POST",
-        "/api/v1/messages",
-        Some(&cookie),
-        "{\"text\":\"persist me\"}",
+        "/api/v1/auth/login",
+        None,
+        &auth_body("space-that-does-not-exist", &key),
     )
     .await;
-    assert_eq!(res.status(), 200);
-    app1.shutdown().await;
-
-    let app2 = App::start(&cfg).await.unwrap();
-    let cookie2 = token(&cookie_from_response(
-        &login(&app2, &app2.access_code.clone().unwrap()).await,
-    ));
-    let res = get(&app2, "/api/v1/messages", Some(&cookie2)).await;
-    assert_eq!(res.status(), 200);
-    let body = common::read_body(res).await;
-    assert_eq!(body["messages"][0]["text"], "persist me");
-    app2.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn second_run_restores_files() {
-    let dir = temp_dir("fh-restorefile");
-    let cfg = app_config(dir.clone());
-    let app1 = App::start(&cfg).await.unwrap();
-    let code = app1.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app1, &code).await));
-    let body = multipart_body(&[file_part("keep.txt", "file content here")]);
-    let res = app1
-        .router()
-        .oneshot(multipart_request("/api/v1/uploads", body, &cookie))
-        .await
-        .unwrap();
-    assert_eq!(res.status(), 201);
-    let json = common::read_body(res).await;
-    let att_id = json["attachment"]["id"].as_str().unwrap().to_string();
-    app1.shutdown().await;
-
-    let app2 = App::start(&cfg).await.unwrap();
-    let code2 = app2.access_code.clone().unwrap();
-    let cookie2 = token(&cookie_from_response(&login(&app2, &code2).await));
-    let res = get(
-        &app2,
-        &format!("/api/v1/files/{att_id}/content"),
-        Some(&cookie2),
-    )
-    .await;
-    assert_eq!(res.status(), 200);
-    let bytes = axum::body::to_bytes(res.into_body(), 1024).await.unwrap();
-    assert_eq!(bytes.to_vec(), b"file content here");
-    app2.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn valid_code_login() {
-    let dir = temp_dir("fh-validlogin");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let code = app.access_code.clone().unwrap();
-    let res = login(&app, &code).await;
-    assert_eq!(res.status(), 200);
-    assert!(cookie_from_response(&res).starts_with("filehelper_session="));
+    assert_json_error(res, "SPACE_NOT_FOUND").await;
     app.shutdown().await;
     cleanup(&dir);
 }
 
 #[tokio::test]
-async fn invalid_code_login() {
-    let dir = temp_dir("fh-invalidlogin");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let res = login(&app, "000000").await;
-    assert_eq!(res.status(), 401);
+async fn create_then_login_roundtrip() {
+    let dir = temp_dir("auth-roundtrip");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
+    let token = create_and_login(&app, "roundtrip-space", &key).await;
+    assert!(!token.is_empty());
+    // Protected endpoint now works.
+    let res = json_request(&app, "GET", "/api/v1/messages", Some(&token), "").await;
+    assert!(res.status().is_success());
     app.shutdown().await;
     cleanup(&dir);
 }
 
 #[tokio::test]
-async fn login_rate_limit() {
-    let dir = temp_dir("fh-ratelimit");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
+async fn wrong_auth_key_fails_login() {
+    let dir = temp_dir("auth-wrongkey");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
+    create_and_login(&app, "keyed-space", &key).await;
+
+    let wrong = auth_key_b64();
+    let res = json_request(
+        &app,
+        "POST",
+        "/api/v1/auth/login",
+        None,
+        &auth_body("keyed-space", &wrong),
+    )
+    .await;
+    assert_json_error(res, "AUTH_FAILED").await;
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn create_duplicate_returns_space_exists() {
+    let dir = temp_dir("auth-dup");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
+    create_and_login(&app, "dup-space", &key).await;
+    let res = json_request(
+        &app,
+        "POST",
+        "/api/v1/auth/create",
+        None,
+        &auth_body("dup-space", &key),
+    )
+    .await;
+    assert_json_error(res, "SPACE_EXISTS").await;
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn login_rate_limited_after_five_failures() {
+    let dir = temp_dir("auth-ratelimit");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
     for _ in 0..5 {
-        let res = login(&app, "999999").await;
-        assert_eq!(res.status(), 401);
+        let res = json_request(
+            &app,
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            &auth_body("no-such-space", &key),
+        )
+        .await;
+        assert_json_error(res, "SPACE_NOT_FOUND").await;
     }
-    // 6th attempt (even with the correct code) is rate limited.
-    let code = app.access_code.clone().unwrap();
-    let res = login(&app, &code).await;
-    assert_eq!(res.status(), 429);
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn old_cookie_invalid_after_restart_new_code_works() {
-    let dir = temp_dir("fh-cookierestart");
-    let cfg = app_config(dir.clone());
-    let app1 = App::start(&cfg).await.unwrap();
-    let code1 = app1.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app1, &code1).await));
-    assert!(!cookie.is_empty());
-    app1.shutdown().await;
-
-    // The signing key rotated with the code: old sessions are invalid.
-    let app2 = App::start(&cfg).await.unwrap();
-    let res = get(&app2, "/api/v1/auth/session", Some(&cookie)).await;
-    assert_eq!(
-        res.status(),
-        401,
-        "old cookie must be invalid after restart"
-    );
-
-    // Logging in with the fresh code yields a working session.
-    let code2 = app2.access_code.clone().unwrap();
-    assert_ne!(code1, code2);
-    let new_cookie = token(&cookie_from_response(&login(&app2, &code2).await));
-    let res = get(&app2, "/api/v1/auth/session", Some(&new_cookie)).await;
-    assert_eq!(res.status(), 200);
-    app2.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn reset_code_changes_code() {
-    let dir = temp_dir("fh-resetcode");
-    let cfg = app_config(dir.clone());
-    let app1 = App::start(&cfg).await.unwrap();
-    let code1 = app1.access_code.clone().unwrap();
-    app1.shutdown().await;
-
-    let mut cfg2 = app_config(dir.clone());
-    cfg2.reset_code = true;
-    let app2 = App::start(&cfg2).await.unwrap();
-    let code2 = app2.access_code.clone().unwrap();
-    assert_ne!(code1, code2, "reset must produce a different code");
-    app2.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn reset_code_invalidates_previous_cookie() {
-    let dir = temp_dir("fh-resetinvalid");
-    let cfg = app_config(dir.clone());
-    let app1 = App::start(&cfg).await.unwrap();
-    let code1 = app1.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app1, &code1).await));
-    app1.shutdown().await;
-
-    let mut cfg2 = app_config(dir.clone());
-    cfg2.reset_code = true;
-    let app2 = App::start(&cfg2).await.unwrap();
-    let res = get(&app2, "/api/v1/auth/session", Some(&cookie)).await;
-    assert_eq!(res.status(), 401, "old cookie must be invalid after reset");
-    app2.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn runtime_password_override() {
-    let dir = temp_dir("fh-runtimepw");
-    let mut cfg = app_config(dir.clone());
-    cfg.password = Some("654321".to_string());
-    let app = App::start(&cfg).await.unwrap();
-
-    // No persistence: no secret file, no stored code.
-    assert!(!dir.join("secret").exists());
-    assert!(app.access_code.is_none());
-
-    let res = login(&app, "654321").await;
-    assert_eq!(res.status(), 200);
-    let res = login(&app, "111111").await;
-    assert_eq!(res.status(), 401);
-
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn ephemeral_uses_temp_dir() {
-    let cfg = Config {
-        addr: "127.0.0.1:0".to_string(),
-        password: None,
-        data_dir: None,
-        ephemeral: true,
-        reset_code: false,
-        max_upload_size: 1024,
-    };
-    let app = App::start(&cfg).await.unwrap();
-    let tmp_root = std::env::temp_dir();
-    assert!(
-        app.data_dir.starts_with(&tmp_root),
-        "ephemeral data dir must live under the system temp dir"
-    );
-    assert!(app.ephemeral);
-    // Fresh access code every run.
-    let code1 = app.access_code.clone().unwrap();
-    let dir = app.data_dir.clone();
-    app.shutdown().await;
-    cleanup(&dir);
-    let _ = code1;
-}
-
-#[tokio::test]
-async fn ephemeral_cleanup_on_shutdown() {
-    let cfg = Config {
-        addr: "127.0.0.1:0".to_string(),
-        password: None,
-        data_dir: None,
-        ephemeral: true,
-        reset_code: false,
-        max_upload_size: 1024,
-    };
-    let app = App::start(&cfg).await.unwrap();
-    let dir = app.data_dir.clone();
-    assert!(dir.exists());
-    app.shutdown().await;
-    assert!(
-        !dir.exists(),
-        "ephemeral data dir must be removed on shutdown"
-    );
-}
-
-#[tokio::test]
-async fn protected_download_requires_auth() {
-    let dir = temp_dir("fh-authdl");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let res = get(&app, "/api/v1/files/anything/content", None).await;
-    assert_eq!(res.status(), 401);
-    let res = get(&app, "/api/v1/files/anything/download", None).await;
-    assert_eq!(res.status(), 401);
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn websocket_requires_auth() {
-    let dir = temp_dir("fh-authws");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let res = get(&app, "/api/v1/ws", None).await;
-    assert_eq!(res.status(), 401);
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn unicode_filename_roundtrip() {
-    let dir = temp_dir("fh-unicode");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let code = app.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app, &code).await));
-
-    // Unicode + spaces + emoji + a path-separator attempt in the name.
-    let name = "报告 总结 2026 📄.txt";
-    let body = multipart_body(&[file_part(name, "unicode content")]);
-    let res = app
-        .router()
-        .oneshot(multipart_request("/api/v1/uploads", body, &cookie))
-        .await
-        .unwrap();
-    assert_eq!(res.status(), 201);
-    let json = common::read_body(res).await;
-    assert_eq!(json["attachment"]["filename"], name);
-    let att_id = json["attachment"]["id"].as_str().unwrap().to_string();
-
-    // Stored file must be a UUID under files/, never the raw filename.
-    let entries: Vec<_> = std::fs::read_dir(dir.join("files"))
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .collect();
-    assert_eq!(entries.len(), 1);
-    let stored_name = entries[0].file_name().to_string_lossy().to_string();
-    assert_ne!(stored_name, name);
-    assert_eq!(stored_name.len(), 36, "storage name is a UUID");
-
-    // Download with Range still returns the original content.
-    let res = get(
-        &app,
-        &format!("/api/v1/files/{att_id}/content"),
-        Some(&cookie),
-    )
-    .await;
-    assert_eq!(res.status(), 200);
-    let bytes = axum::body::to_bytes(res.into_body(), 1024).await.unwrap();
-    assert_eq!(bytes.to_vec(), b"unicode content");
-
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn traversal_attempt_cannot_escape_data_dir() {
-    let dir = temp_dir("fh-traversal");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let code = app.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app, &code).await));
-
-    // Filename containing path separators and traversal tokens.
-    let name = "../../escape/../../etc/passwd.txt";
-    let body = multipart_body(&[file_part(name, "nope")]);
-    let res = app
-        .router()
-        .oneshot(multipart_request("/api/v1/uploads", body, &cookie))
-        .await
-        .unwrap();
-    assert_eq!(res.status(), 201);
-
-    // No file escaped the data dir.
-    assert!(!dir.parent().unwrap().join("escape").exists());
-    assert!(!dir.join("..").join("escape").exists());
-    // The file lives under files/ as a UUID.
-    let entries: Vec<_> = std::fs::read_dir(dir.join("files"))
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .collect();
-    assert_eq!(entries.len(), 1);
-
-    app.shutdown().await;
-    cleanup(&dir);
-}
-
-#[tokio::test]
-async fn clear_all_removes_messages_but_keeps_code() {
-    let dir = temp_dir("fh-clearall");
-    let cfg = app_config(dir.clone());
-    let app = App::start(&cfg).await.unwrap();
-    let code = app.access_code.clone().unwrap();
-    let cookie = token(&cookie_from_response(&login(&app, &code).await));
-
-    json_request(
+    // Sixth attempt in the same window is rate limited.
+    let res = json_request(
         &app,
         "POST",
-        "/api/v1/messages",
-        Some(&cookie),
-        "{\"text\":\"hello\"}",
+        "/api/v1/auth/login",
+        None,
+        &auth_body("no-such-space", &key),
     )
     .await;
-    let body = multipart_body(&[file_part("gone.txt", "x")]);
-    let res = app
-        .router()
-        .oneshot(multipart_request("/api/v1/uploads", body, &cookie))
+    assert_json_error(res, "RATE_LIMITED").await;
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn create_rate_limited() {
+    let dir = temp_dir("auth-createlimit");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
+    // The limiter allows 10 creates/min; one will be a duplicate, so 10
+    // unique creates pass and the 11th unique create is limited.
+    for i in 0..10 {
+        let res = json_request(
+            &app,
+            "POST",
+            "/api/v1/auth/create",
+            None,
+            &auth_body(&format!("space-{i}"), &key),
+        )
+        .await;
+        assert!(res.status().is_success(), "create {i} failed");
+    }
+    let res = json_request(
+        &app,
+        "POST",
+        "/api/v1/auth/create",
+        None,
+        &auth_body("space-extra", &key),
+    )
+    .await;
+    assert_json_error(res, "RATE_LIMITED").await;
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn protected_routes_require_bearer() {
+    let dir = temp_dir("auth-protected");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
+    create_and_login(&app, "prot-space", &key).await;
+
+    // No token → 401.
+    let res = json_request(&app, "GET", "/api/v1/messages", None, "").await;
+    assert_eq!(res.status().as_u16(), 401);
+
+    // Garbage token → 401.
+    let res = json_request(
+        &app,
+        "GET",
+        "/api/v1/messages",
+        Some("not.a.valid.token"),
+        "",
+    )
+    .await;
+    assert_eq!(res.status().as_u16(), 401);
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn mutation_without_x_header_rejected() {
+    let dir = temp_dir("auth-xheader");
+    let app = start_app(dir.clone()).await;
+    let key = auth_key_b64();
+    let token = create_and_login(&app, "xh-space", &key).await;
+
+    // Send a POST without X-FileHelper-Request: 1 (defense in depth).
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/v1/messages")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {token}"))
+        .body(axum::body::Body::from(r#"{"payload":"x"}"#))
+        .unwrap();
+    use tower::ServiceExt;
+    let res = app.router().oneshot(req).await.unwrap();
+    assert_eq!(res.status().as_u16(), 401);
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn session_token_tamper_and_expiry() {
+    let dir = temp_dir("auth-tamper");
+    let app = start_app(dir.clone()).await;
+    let secret = app.state().config.session_secret;
+    let token = session::issue_session_token(&secret, "some-space", 3600).unwrap();
+    assert!(session::verify_session_token(&secret, &token).is_ok());
+
+    // Flip one payload character → signature mismatch.
+    let (payload, sig) = token.split_once('.').unwrap();
+    let mut bytes =
+        base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, payload).unwrap();
+    bytes[0] ^= 0x01;
+    let tampered_payload =
+        base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes);
+    let tampered = format!("{tampered_payload}.{sig}");
+    assert!(session::verify_session_token(&secret, &tampered).is_err());
+
+    // Expired token → SESSION_EXPIRED. Issue with a 1s TTL and wait it
+    // out so the expiry check actually triggers.
+    let expired = session::issue_session_token(&secret, "some-space", 1).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(2100));
+    let err = session::verify_session_token(&secret, &expired).unwrap_err();
+    assert!(matches!(err, filehelper::error::AppError::SessionExpired));
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn instance_id_stable_across_restart() {
+    let dir = temp_dir("auth-instance");
+    let app1 = start_app(dir.clone()).await;
+    let id1 = app1.state().config.instance_id.clone();
+    assert_eq!(id1.len(), 43); // 32 bytes → base64url no pad
+    app1.shutdown().await;
+
+    let app2 = start_app(dir.clone()).await;
+    let id2 = app2.state().config.instance_id.clone();
+    assert_eq!(id1, id2, "instance id must persist across restarts");
+    app2.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn ephemeral_uses_fresh_instance_id_and_cleans_up() {
+    let dir = temp_dir("auth-ephemeral");
+    let mut config = app_config(dir.clone());
+    config.ephemeral = true;
+    let app = filehelper::app::App::start(&config).await.unwrap();
+    // Ephemeral resolves its own temp dir, not `dir`.
+    assert_ne!(app.data_dir, dir);
+    let ephemeral_dir = app.data_dir.clone();
+    let _id = app.state().config.instance_id.clone();
+    app.shutdown().await;
+    assert!(!ephemeral_dir.exists(), "ephemeral dir must be removed");
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn legacy_database_is_backed_up_and_fresh_schema_created() {
+    let dir = temp_dir("auth-legacy");
+    std::fs::create_dir_all(dir.join("files")).unwrap();
+    std::fs::create_dir_all(dir.join("tmp")).unwrap();
+    std::fs::create_dir_all(dir.join("trash")).unwrap();
+
+    // Craft a legacy plaintext DB by hand.
+    let db_path = dir.join("filehelper.db");
+    let url = format!("sqlite://{}?mode=rwc", db_path.display());
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&url)
         .await
         .unwrap();
-    assert_eq!(res.status(), 201);
+    sqlx::query("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO meta VALUES ('access_code_hash', 'legacy-hash'), ('fts_schema_version', '2')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TABLE messages (id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT, created_at_ms INTEGER NOT NULL)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO messages VALUES ('legacy-1', 'text', 'OLD PLAINTEXT HISTORY', 1)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
 
-    let res = json_request(&app, "POST", "/api/v1/clear", Some(&cookie), "").await;
-    assert_eq!(res.status(), 200);
+    // Start the app: the legacy dir is renamed aside; the fresh store is
+    // created in `dir` and must not contain the old plaintext history.
+    let app = start_app(dir.clone()).await;
+    let fresh_db = std::fs::read(dir.join("filehelper.db")).unwrap();
+    assert!(
+        !String::from_utf8_lossy(&fresh_db).contains("OLD PLAINTEXT HISTORY"),
+        "fresh store must not inherit legacy plaintext"
+    );
+    // The newest legacy backup (this test's) still has the plaintext.
+    let parent = dir.parent().unwrap();
+    let mut backups: Vec<PathBuf> = std::fs::read_dir(parent)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().starts_with("legacy-backup-"))
+                .unwrap_or(false)
+        })
+        .collect();
+    backups.sort_by_key(|b| std::fs::metadata(b).and_then(|m| m.modified()).ok());
+    let newest = backups.last().expect("a legacy backup must exist");
+    let backup_db = newest.join("filehelper.db");
+    assert!(backup_db.exists());
+    let db_bytes = std::fs::read(&backup_db).unwrap();
+    let text = String::from_utf8_lossy(&db_bytes);
+    assert!(
+        text.contains("OLD PLAINTEXT HISTORY"),
+        "backup must keep the legacy data"
+    );
 
-    let list = get(&app, "/api/v1/messages", Some(&cookie)).await;
-    let body = common::read_body(list).await;
-    assert_eq!(body["messages"].as_array().unwrap().len(), 0);
+    // Fresh store works.
+    let key = auth_key_b64();
+    let token = create_and_login(&app, "fresh-space", &key).await;
+    assert!(!token.is_empty());
+    app.shutdown().await;
+    cleanup(&dir);
+    cleanup(newest);
+}
 
-    // Access code still works after clearing.
-    let res = login(&app, &code).await;
-    assert_eq!(res.status(), 200);
+#[tokio::test]
+async fn per_space_tokens_are_isolated() {
+    let dir = temp_dir("auth-iso");
+    let app = start_app(dir.clone()).await;
+    let key_a = auth_key_b64();
+    let key_b = auth_key_b64();
+    let token_a = create_and_login(&app, "space-a", &key_a).await;
+    let token_b = create_and_login(&app, "space-b", &key_b).await;
+
+    // A's token only sees A's space.
+    send_text(&app, &token_a, "FH1.aaaa").await;
+    send_text(&app, &token_b, "FH1.bbbb").await;
+
+    let list_a = list_messages(&app, &token_a).await;
+    assert_eq!(list_a["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(list_a["messages"][0]["payload"], "FH1.aaaa");
+
+    let list_b = list_messages(&app, &token_b).await;
+    assert_eq!(list_b["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(list_b["messages"][0]["payload"], "FH1.bbbb");
+
+    // A cannot touch B's message id.
+    let b_id = list_b["messages"][0]["id"].as_str().unwrap();
+    let res = json_request(
+        &app,
+        "DELETE",
+        &format!("/api/v1/messages/{b_id}"),
+        Some(&token_a),
+        "",
+    )
+    .await;
+    assert_eq!(res.status().as_u16(), 204); // treated as absent, no info leak
+    let list_b_after = list_messages(&app, &token_b).await;
+    assert_eq!(list_b_after["messages"].as_array().unwrap().len(), 1);
 
     app.shutdown().await;
     cleanup(&dir);

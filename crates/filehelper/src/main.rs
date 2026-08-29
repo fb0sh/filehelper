@@ -65,11 +65,8 @@ fn print_startup(app: &App, addr: &SocketAddr) {
     } else {
         println!("  http://{addr}");
     }
-    if let Some(code) = &app.access_code {
-        println!("Access code:  {code}");
-    }
     println!("Data:  {}", app.data_dir.display());
-    println!("Security:  Access code enabled  LAN HTTP mode");
+    println!("Security:  End-to-end encrypted content  LAN HTTP mode");
     println!("Use on trusted networks.");
     println!();
     println!("Press Ctrl+C to stop.");

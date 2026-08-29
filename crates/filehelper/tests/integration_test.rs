@@ -1,437 +1,380 @@
 mod common;
+use common::*;
 
-use common::{cleanup, make_session_cookie, setup_test_app};
-use filehelper::auth::password;
 use filehelper::db;
+use sqlx::SqlitePool;
 
-#[tokio::test]
-async fn test_config_cli() {
-    use clap::Parser;
-    let config = filehelper::config::Config::parse_from([
-        "filehelper",
-        "--addr",
-        "0.0.0.0:9090",
-        "--password",
-        "123456",
-        "--data-dir",
-        "/tmp/fh-test",
-        "--max-upload-size",
-        "1048576",
-        "--ephemeral",
-        "--reset-code",
-    ]);
-    assert_eq!(config.addr, "0.0.0.0:9090");
-    assert_eq!(config.password.as_deref(), Some("123456"));
-    assert_eq!(
-        config
-            .data_dir
-            .as_deref()
-            .map(|p| p.to_string_lossy().to_string()),
-        Some("/tmp/fh-test".to_string())
-    );
-    assert_eq!(config.max_upload_size, 1048576);
-    assert!(config.ephemeral);
-    assert!(config.reset_code);
+async fn pool_of(app: &filehelper::app::App) -> SqlitePool {
+    app.state().db.clone()
 }
 
 #[tokio::test]
-async fn test_password_hash_and_verify() {
-    let hash = password::hash_password("secret123").unwrap();
-    assert!(password::verify_password("secret123", &hash).unwrap());
-    assert!(!password::verify_password("wrong", &hash).unwrap());
-}
+async fn schema_has_encrypted_tables_and_indexes() {
+    let dir = temp_dir("int-schema");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
 
-#[tokio::test]
-async fn test_db_migration() {
-    let (state, tmp) = setup_test_app().await;
-    let rows: Vec<(String,)> =
-        sqlx::query_as("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-            .fetch_all(&state.db)
+    for table in ["meta", "spaces", "messages", "attachments"] {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+        )
+        .bind(table)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 1, "table {table} must exist");
+    }
+
+    let idx = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_messages_space_time','idx_attachments_space_message')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(idx, 2, "space/time composite indexes must exist");
+
+    // No FTS tables.
+    let fts =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE '%fts%'")
+            .fetch_one(&pool)
             .await
             .unwrap();
-    let names: Vec<&str> = rows.iter().map(|r| r.0.as_str()).collect();
-    assert!(names.contains(&"messages"));
-    assert!(names.contains(&"attachments"));
-    assert!(names.contains(&"meta"));
-    cleanup(&tmp);
-}
+    assert_eq!(fts, 0, "server-side FTS must be gone");
 
-#[tokio::test]
-async fn test_message_insert_and_list() {
-    let (state, tmp) = setup_test_app().await;
-
-    let msg = db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "text".to_string(),
-            text: Some("Hello world".to_string()),
-            attachment: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(msg.kind, "text");
-    assert_eq!(msg.text.as_deref(), Some("Hello world"));
-    assert!(msg.attachment.is_none());
-
-    let list = db::list_messages(&state.db, None, 50).await.unwrap();
-    assert_eq!(list.messages.len(), 1);
-    assert_eq!(list.messages[0].id, msg.id);
-    assert!(list.next_cursor.is_none());
-
-    cleanup(&tmp);
-}
-
-#[tokio::test]
-async fn test_message_pagination() {
-    let (state, tmp) = setup_test_app().await;
-
-    for i in 0..5 {
-        db::insert_message(
-            &state.db,
-            &db::NewMessage {
-                kind: "text".to_string(),
-                text: Some(format!("Message {i}")),
-                attachment: None,
-            },
-        )
+    let version: String = sqlx::query_scalar("SELECT value FROM meta WHERE key='schema_version'")
+        .fetch_one(&pool)
         .await
         .unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
-    }
+    assert_eq!(version, "3");
+    app.shutdown().await;
+    cleanup(&dir);
+}
 
-    let page1 = db::list_messages(&state.db, None, 3).await.unwrap();
-    assert_eq!(page1.messages.len(), 3);
+#[tokio::test]
+async fn instance_id_created_once_and_stored() {
+    let dir = temp_dir("int-instance");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+    let stored: String = sqlx::query_scalar("SELECT value FROM meta WHERE key='instance_id'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored, app.state().config.instance_id);
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn spaces_create_and_verify_auth() {
+    let dir = temp_dir("int-spaces");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+
+    let verifier = [7u8; 32];
+    db::spaces::create_space(&pool, "space-1", &verifier)
+        .await
+        .unwrap();
+    // Duplicate → SpaceExists.
+    let err = db::spaces::create_space(&pool, "space-1", &verifier)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, filehelper::error::AppError::SpaceExists));
+
+    // Correct verifier passes, wrong one fails, unknown space → NotFound.
+    db::spaces::verify_space(&pool, "space-1", &verifier)
+        .await
+        .unwrap();
+    let wrong = [9u8; 32];
+    let err = db::spaces::verify_space(&pool, "space-1", &wrong)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, filehelper::error::AppError::AuthFailed));
+    let err = db::spaces::verify_space(&pool, "nope", &verifier)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, filehelper::error::AppError::SpaceNotFound));
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn messages_pagination_and_tuple_cursor() {
+    let dir = temp_dir("int-pagination");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+    db::spaces::create_space(&pool, "page-space", &[1u8; 32])
+        .await
+        .unwrap();
+
+    // Insert 25 messages in two spaces (interleaved so timestamps are
+    // mixed) and paginate 10 at a time.
+    for i in 0..25 {
+        let _ = db::insert_message(&pool, "page-space", &format!("FH1.msg-{i}"), None)
+            .await
+            .unwrap();
+    }
+    db::spaces::create_space(&pool, "other-space", &[2u8; 32])
+        .await
+        .unwrap();
+    db::insert_message(&pool, "other-space", "FH1.other", None)
+        .await
+        .unwrap();
+
+    let page1 = db::list_messages(&pool, "page-space", None, 10)
+        .await
+        .unwrap();
+    assert_eq!(page1.messages.len(), 10);
     assert!(page1.next_cursor.is_some());
 
-    let cursor = page1.next_cursor.unwrap();
-    let page2 = db::list_messages(&state.db, Some(cursor), 3).await.unwrap();
-    assert_eq!(page2.messages.len(), 2);
-    assert!(page2.next_cursor.is_none());
-
-    cleanup(&tmp);
-}
-
-#[tokio::test]
-async fn test_message_delete() {
-    let (state, tmp) = setup_test_app().await;
-
-    let msg = db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "text".to_string(),
-            text: Some("To be deleted".to_string()),
-            attachment: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    db::delete_message(&state.db, &msg.id).await.unwrap();
-
-    let list = db::list_messages(&state.db, None, 50).await.unwrap();
-    assert!(list.messages.is_empty());
-
-    cleanup(&tmp);
-}
-
-#[tokio::test]
-async fn test_message_attachment_cascade() {
-    let (state, tmp) = setup_test_app().await;
-
-    let msg = db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "document".to_string(),
-            text: None,
-            attachment: Some(db::NewAttachment {
-                original_name: "test.txt".to_string(),
-                mime_type: Some("text/plain".to_string()),
-                size_bytes: 100,
-                sha256: "abc123".to_string(),
-                storage_name: "storage-uuid".to_string(),
-            }),
-        },
-    )
-    .await
-    .unwrap();
-
-    assert!(msg.attachment.is_some());
-
-    // Delete message, attachment should cascade
-    db::delete_message(&state.db, &msg.id).await.unwrap();
-
-    let att = filehelper::db::attachments::get_attachment(&state.db, &msg.attachment.unwrap().id)
+    let page2 = db::list_messages(&pool, "page-space", page1.next_cursor.clone(), 10)
         .await
         .unwrap();
-    assert!(att.is_none());
+    assert_eq!(page2.messages.len(), 10);
 
-    cleanup(&tmp);
-}
-
-#[tokio::test]
-async fn test_storage_stats() {
-    let (state, tmp) = setup_test_app().await;
-
-    db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "image".to_string(),
-            text: None,
-            attachment: Some(db::NewAttachment {
-                original_name: "photo.jpg".to_string(),
-                mime_type: Some("image/jpeg".to_string()),
-                size_bytes: 1024,
-                sha256: "hash1".to_string(),
-                storage_name: "s1".to_string(),
-            }),
-        },
-    )
-    .await
-    .unwrap();
-
-    let stats = db::get_storage_stats(&state.db).await.unwrap();
-    assert_eq!(stats["total"], 1024);
-    assert_eq!(stats["images"], 1024);
-    assert_eq!(stats["videos"], 0);
-
-    cleanup(&tmp);
-}
-
-#[tokio::test]
-async fn test_search() {
-    let (state, tmp) = setup_test_app().await;
-
-    db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "text".to_string(),
-            text: Some("Find this unique text".to_string()),
-            attachment: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    // Wait a moment for FTS index
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    let results = db::search::search_messages(&state.db, "unique", 10)
+    let page3 = db::list_messages(&pool, "page-space", page2.next_cursor.clone(), 10)
         .await
         .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].text.as_deref(), Some("Find this unique text"));
+    assert_eq!(page3.messages.len(), 5);
+    assert!(page3.next_cursor.is_none());
 
-    cleanup(&tmp);
-}
+    // Union covers all 25 exactly once.
+    let mut seen: Vec<String> = page1
+        .messages
+        .iter()
+        .chain(page2.messages.iter())
+        .chain(page3.messages.iter())
+        .map(|m| m.id.clone())
+        .collect();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), 25);
 
-#[tokio::test]
-async fn test_session_cookie() {
-    let (state, tmp) = setup_test_app().await;
-    let cookie = make_session_cookie(&state);
-    assert!(cookie.starts_with("filehelper_session="));
-    assert!(cookie.contains("HttpOnly"));
-    assert!(cookie.contains("SameSite=Strict"));
-    cleanup(&tmp);
-}
-
-#[tokio::test]
-async fn test_password_derive_keys() {
-    let salt: [u8; 32] = [1; 32];
-    let (auth_key, session_key) = password::derive_keys("test", &salt);
-    assert_eq!(auth_key.len(), 32);
-    assert_eq!(session_key.len(), 32);
-    // Different keys for different purposes
-    assert_ne!(auth_key, session_key);
-}
-
-#[tokio::test]
-async fn test_fts_searches_attachment_filename() {
-    let (state, tmp) = setup_test_app().await;
-
-    db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "document".to_string(),
-            text: None,
-            attachment: Some(db::NewAttachment {
-                original_name: "quarterly-report-2026.pdf".to_string(),
-                mime_type: Some("application/pdf".to_string()),
-                size_bytes: 10,
-                sha256: "h".to_string(),
-                storage_name: "s-report".to_string(),
-            }),
-        },
-    )
-    .await
-    .unwrap();
-
-    db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "text".to_string(),
-            text: Some("unrelated text message".to_string()),
-            attachment: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    let results = db::search::search_messages(&state.db, "quarterly", 10)
-        .await
-        .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(
-        results[0].attachment.as_ref().unwrap().filename,
-        "quarterly-report-2026.pdf"
+    // Other space's message is never visible.
+    assert!(
+        page1
+            .messages
+            .iter()
+            .chain(page2.messages.iter())
+            .chain(page3.messages.iter())
+            .all(|m| m.payload != "FH1.other")
     );
-
-    cleanup(&tmp);
+    app.shutdown().await;
+    cleanup(&dir);
 }
 
 #[tokio::test]
-async fn test_fts_special_characters_do_not_error() {
-    let (state, tmp) = setup_test_app().await;
+async fn delete_messages_cascades_attachments_and_scopes() {
+    let dir = temp_dir("int-delete");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+    db::spaces::create_space(&pool, "del-space", &[1u8; 32])
+        .await
+        .unwrap();
 
-    db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "text".to_string(),
-            text: Some("hello world".to_string()),
-            attachment: None,
-        },
+    let m1 = db::insert_message(
+        &pool,
+        "del-space",
+        "FH1.one",
+        Some(db::NewAttachment {
+            id: "att-1".into(),
+            storage_name: "storage-1".into(),
+            ciphertext_size: 100,
+        }),
     )
     .await
     .unwrap();
+    db::insert_message(&pool, "del-space", "FH1.two", None)
+        .await
+        .unwrap();
 
-    // None of these user inputs may produce an error (500).
-    for query in [
-        "\"",
-        "(",
-        ")",
-        "*",
-        "-",
-        "OR",
-        "a OR b",
-        "NEAR(a b)",
-        "\"unclosed",
-        "*",
-        "()",
-        "a-b",
-        "NOT",
-        "AND",
-        "^foo",
-        "日本語",
-        "文件 传输",
-    ] {
-        let result = db::search::search_messages(&state.db, query, 10).await;
-        assert!(result.is_ok(), "search failed for input: {query}");
-    }
+    // Only m1's storage name comes back; attachment row cascades away.
+    let names = db::delete_messages(&pool, "del-space", &[m1.id.clone(), "ghost-id".into()])
+        .await
+        .unwrap();
+    assert_eq!(names, vec!["storage-1".to_string()]);
 
-    cleanup(&tmp);
+    let att_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM attachments")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(att_count, 0);
+    let msg_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(msg_count, 1);
+    app.shutdown().await;
+    cleanup(&dir);
 }
 
 #[tokio::test]
-async fn test_fts_finds_text_after_special_char_sanitizing() {
-    let (state, tmp) = setup_test_app().await;
-
-    db::insert_message(
-        &state.db,
-        &db::NewMessage {
-            kind: "text".to_string(),
-            text: Some("meeting notes from monday".to_string()),
-            attachment: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    let results = db::search::search_messages(&state.db, "\"meeting notes\"", 10)
+async fn context_window_old_to_new() {
+    let dir = temp_dir("int-context");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+    db::spaces::create_space(&pool, "ctx-space", &[1u8; 32])
         .await
         .unwrap();
-    assert_eq!(results.len(), 1);
 
-    cleanup(&tmp);
-}
-
-#[tokio::test]
-async fn test_message_context_preserves_order() {
-    let (state, tmp) = setup_test_app().await;
-
-    let mut ids = Vec::new();
-    for i in 0..5 {
-        let m = db::insert_message(
-            &state.db,
-            &db::NewMessage {
-                kind: "text".to_string(),
-                text: Some(format!("message-{i}")),
-                attachment: None,
-            },
-        )
-        .await
-        .unwrap();
+    let mut ids: Vec<String> = Vec::new();
+    for i in 0..20 {
+        let m = db::insert_message(&pool, "ctx-space", &format!("FH1.m{i}"), None)
+            .await
+            .unwrap();
         ids.push(m.id);
-        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
     }
 
-    // Jump to the middle message.
-    let ctx = db::get_message_context(&state.db, &ids[2], 10)
+    let ctx = db::get_message_context(&pool, "ctx-space", &ids[10], 9)
         .await
         .unwrap()
         .unwrap();
-
-    let texts: Vec<&str> = ctx
-        .messages
-        .iter()
-        .map(|m| m.text.as_deref().unwrap())
-        .collect();
+    // Old → new, exactly the expected window (target + half newer).
+    let payloads: Vec<String> = ctx.messages.iter().map(|m| m.payload.clone()).collect();
     assert_eq!(
-        texts,
+        payloads,
         vec![
-            "message-0",
-            "message-1",
-            "message-2",
-            "message-3",
-            "message-4"
+            "FH1.m6".to_string(),
+            "FH1.m7".to_string(),
+            "FH1.m8".to_string(),
+            "FH1.m9".to_string(),
+            "FH1.m10".to_string(),
+            "FH1.m11".to_string(),
+            "FH1.m12".to_string(),
+            "FH1.m13".to_string(),
+            "FH1.m14".to_string(),
         ]
     );
 
-    // All 5 messages fit in the window → no older messages exist.
-    assert!(ctx.next_cursor.is_none());
-
-    cleanup(&tmp);
+    // Cross-space lookup returns None.
+    assert!(
+        db::get_message_context(&pool, "nope", &ids[10], 9)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    app.shutdown().await;
+    cleanup(&dir);
 }
 
 #[tokio::test]
-async fn test_message_context_reports_older_cursor() {
-    let (state, tmp) = setup_test_app().await;
+async fn clear_space_keeps_auth_record() {
+    let dir = temp_dir("int-clear");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+    db::spaces::create_space(&pool, "clear-space", &[1u8; 32])
+        .await
+        .unwrap();
+    db::insert_message(
+        &pool,
+        "clear-space",
+        "FH1.x",
+        Some(db::NewAttachment {
+            id: "att-x".into(),
+            storage_name: "storage-x".into(),
+            ciphertext_size: 5,
+        }),
+    )
+    .await
+    .unwrap();
 
-    let mut ids = Vec::new();
-    for i in 0..6 {
-        let m = db::insert_message(
-            &state.db,
-            &db::NewMessage {
-                kind: "text".to_string(),
-                text: Some(format!("m{i}")),
-                attachment: None,
-            },
+    let names = db::clear_space(&pool, "clear-space").await.unwrap();
+    assert_eq!(names, vec!["storage-x".to_string()]);
+
+    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    let spaces = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM spaces")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(spaces, 1, "space auth record must survive clear");
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn storage_stats_are_space_scoped() {
+    let dir = temp_dir("int-stats");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+    db::spaces::create_space(&pool, "s-a", &[1u8; 32])
+        .await
+        .unwrap();
+    db::spaces::create_space(&pool, "s-b", &[2u8; 32])
+        .await
+        .unwrap();
+
+    for (space, size) in [("s-a", 111i64), ("s-a", 222i64), ("s-b", 333i64)] {
+        db::insert_message(
+            &pool,
+            space,
+            "FH1",
+            Some(db::NewAttachment {
+                id: format!("att-{space}-{size}"),
+                storage_name: format!("st-{space}-{size}"),
+                ciphertext_size: size,
+            }),
         )
         .await
         .unwrap();
-        ids.push(m.id);
-        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
     }
 
-    // Window of 2 centered on the last message: m4 + m5 (tuple order).
-    let ctx = db::get_message_context(&state.db, &ids[5], 2)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(ctx.messages.len(), 2);
-    assert_eq!(ctx.messages[0].text.as_deref(), Some("m4"));
-    assert_eq!(ctx.messages[1].text.as_deref(), Some("m5"));
-    assert_eq!(ctx.next_cursor.as_deref(), Some(ids[4].as_str()));
+    let stats_a = db::get_storage_stats(&pool, "s-a").await.unwrap();
+    assert_eq!(stats_a["ciphertextBytes"], 333);
+    assert_eq!(stats_a["messageCount"], 2);
+    assert_eq!(stats_a["fileCount"], 2);
 
-    cleanup(&tmp);
+    let stats_b = db::get_storage_stats(&pool, "s-b").await.unwrap();
+    assert_eq!(stats_b["ciphertextBytes"], 333);
+    assert_eq!(stats_b["messageCount"], 1);
+    assert_eq!(stats_b["fileCount"], 1);
+
+    app.shutdown().await;
+    cleanup(&dir);
+}
+
+#[tokio::test]
+async fn attachments_are_scoped_by_space() {
+    let dir = temp_dir("int-att");
+    let app = start_app(dir.clone()).await;
+    let pool = pool_of(&app).await;
+    db::spaces::create_space(&pool, "att-a", &[1u8; 32])
+        .await
+        .unwrap();
+    db::spaces::create_space(&pool, "att-b", &[2u8; 32])
+        .await
+        .unwrap();
+    let m = db::insert_message(&pool, "att-a", "FH1", None)
+        .await
+        .unwrap();
+    db::insert_message(
+        &pool,
+        "att-a",
+        "FH1",
+        Some(db::NewAttachment {
+            id: "att-a-1".into(),
+            storage_name: "sa-1".into(),
+            ciphertext_size: 10,
+        }),
+    )
+    .await
+    .unwrap();
+    let _ = m;
+    assert!(
+        db::attachments::get_attachment(&pool, "att-a", "att-a-1")
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        db::attachments::get_attachment(&pool, "att-b", "att-a-1")
+            .await
+            .unwrap()
+            .is_none(),
+        "another space must not see the attachment"
+    );
+    app.shutdown().await;
+    cleanup(&dir);
 }

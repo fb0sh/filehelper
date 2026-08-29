@@ -1,9 +1,26 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-pub const SESSION_TTL_SECS: u64 = 30 * 86400; // 30 days
-pub const ACCESS_CODE_MIN: u32 = 100_000;
-pub const ACCESS_CODE_MAX: u32 = 999_999;
+/// Bearer session TTL: 24 hours. The client re-authenticates with its
+/// derived auth key whenever the tab refreshes, so a shorter TTL is fine.
+pub const SESSION_TTL_SECS: u64 = 24 * 3600;
+
+/// Max encrypted text/file-message payload (opaque to the server).
+pub const MAX_MESSAGE_PAYLOAD: usize = 256 * 1024; // 256 KiB
+
+/// Max ids in one batch delete.
+pub const MAX_BATCH_IDS: usize = 500;
+
+/// Client-side plaintext chunk size (8 MiB). The server uses it only to
+/// compute the maximum ciphertext overhead allowance.
+pub const FILE_CHUNK_SIZE: u64 = 8 * 1024 * 1024;
+
+/// XChaCha20-Poly1305 AEAD tag length.
+pub const AEAD_TAG: u64 = 16;
+
+/// Create-space rate limit.
+pub const CREATE_LIMIT: usize = 10;
+pub const CREATE_WINDOW_SECS: u64 = 60;
 
 // Cross-platform application data directory, matching the spec:
 //   Linux:   ~/.local/share/filehelper/
@@ -19,31 +36,24 @@ const APP_DIR_NAME: &str = "filehelper";
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "filehelper",
-    version = "0.1.0",
-    about = "A tiny cross-platform file transfer assistant for your local network"
+    version = "0.2.0",
+    about = "A tiny end-to-end encrypted file transfer assistant for your local network"
 )]
 pub struct Config {
     /// Listen address
     #[arg(long, default_value = "0.0.0.0:8080")]
     pub addr: String,
 
-    /// Use this access code for this run only (does not overwrite the stored code)
-    #[arg(long)]
-    pub password: Option<String>,
-
     /// Override the data directory
     #[arg(long)]
     pub data_dir: Option<PathBuf>,
 
-    /// One-shot run: temp data dir, fresh access code, cleanup on exit
+    /// One-shot run: OS temp data dir, removed on graceful exit
     #[arg(long)]
     pub ephemeral: bool,
 
-    /// Generate a new access code, invalidate old sessions, keep all data
-    #[arg(long)]
-    pub reset_code: bool,
-
-    /// Maximum upload size in bytes
+    /// Maximum upload size in bytes (plaintext; the server enforces the
+    /// matching ciphertext bound including AEAD overhead)
     #[arg(long, default_value = "10737418240")]
     pub max_upload_size: u64,
 }
@@ -59,12 +69,6 @@ impl Config {
             return Ok(dir.clone());
         }
         default_app_data_dir()
-    }
-
-    /// Whether the persisted auth (access code hash + secret) should be
-    /// created/loaded. A runtime --password override skips persistence.
-    pub fn uses_persisted_auth(&self) -> bool {
-        self.password.is_none()
     }
 }
 

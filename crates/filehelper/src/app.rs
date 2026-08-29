@@ -1,6 +1,5 @@
-use crate::auth::AuthBundle;
 use crate::config::Config;
-use crate::state::{AppConfig, AppState};
+use crate::state::{AppConfig, AppState, ciphertext_cap};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -10,15 +9,27 @@ use std::time::Duration;
 pub struct App {
     pub state: AppState,
     pub data_dir: PathBuf,
-    /// Access code for terminal display (None under --password override).
-    pub access_code: Option<String>,
     pub ephemeral: bool,
     router: axum::Router,
 }
 
+const SESSION_SECRET_FILE: &str = "session-secret";
+
 impl App {
     pub async fn start(config: &Config) -> Result<Self, String> {
         let data_dir = config.resolve_data_dir()?;
+
+        // Pre-vNext data (plaintext schema) is never auto-migrated:
+        // rename the whole directory aside and start a fresh encrypted
+        // store. The old files stay untouched on disk.
+        let backup = maybe_backup_legacy(&data_dir).await?;
+        if let Some(backup) = backup {
+            println!(
+                "Legacy FileHelper data was preserved at:\n  {}",
+                backup.display()
+            );
+        }
+
         std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
         crate::files::storage::ensure_dirs(&data_dir).map_err(|e| e.to_string())?;
 
@@ -28,27 +39,32 @@ impl App {
             .connect(&format!("sqlite://{}?mode=rwc", db_path.display()))
             .await
             .map_err(|e| e.to_string())?;
-        crate::db::init_db(&pool).await.map_err(|e| e.to_string())?;
 
-        let auth: AuthBundle = if config.reset_code {
-            crate::auth::reset_access_code(&data_dir, &pool)
-                .await
-                .map_err(|e| e.to_string())?
+        crate::db::init_db(&pool).await.map_err(|e| e.to_string())?;
+        let instance_id = crate::db::get_or_create_instance_id(&pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Session signing secret: persisted (0600) so Bearer tokens and
+        // server restarts play well together. --ephemeral gets a fresh
+        // in-memory secret (and a fresh temp data dir).
+        let session_secret = if config.ephemeral {
+            rand::random()
         } else {
-            crate::auth::init_auth(&data_dir, &pool, config.password.as_deref())
-                .await
-                .map_err(|e| e.to_string())?
+            load_or_create_session_secret(&data_dir).map_err(|e| e.to_string())?
         };
 
         let app_config = AppConfig {
             name: "FileHelper".to_string(),
             max_upload_size: config.max_upload_size,
+            max_ciphertext_size: ciphertext_cap(config.max_upload_size),
             data_dir: data_dir.clone(),
             files_dir: data_dir.join("files"),
             tmp_dir: data_dir.join("tmp"),
             trash_dir: data_dir.join("trash"),
-            signing_key: auth.signing_key,
-            runtime_code: auth.runtime_code,
+            session_secret,
+            instance_id,
+            crypto_version: crate::db::CRYPTO_VERSION,
             ephemeral: config.ephemeral,
         };
 
@@ -59,7 +75,6 @@ impl App {
         Ok(Self {
             state,
             data_dir,
-            access_code: auth.access_code,
             ephemeral: config.ephemeral,
             router,
         })
@@ -84,6 +99,60 @@ impl App {
                 .ok();
         }
     }
+}
+
+/// If the data dir holds a legacy (pre-vNext) database, rename the whole
+/// directory to `legacy-backup-YYYYMMDD-HHMMSS` (atomic rename, never a
+/// copy) and return its path. Fresh/encrypted dirs are untouched.
+async fn maybe_backup_legacy(data_dir: &Path) -> Result<Option<PathBuf>, String> {
+    if data_dir.join("filehelper.db").exists() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!(
+                "sqlite://{}?mode=ro",
+                data_dir.join("filehelper.db").display()
+            ))
+            .await
+            .map_err(|e| e.to_string())?;
+        let legacy = crate::db::detect_legacy(&pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        pool.close().await;
+        if legacy {
+            let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+            let backup = data_dir
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(format!("legacy-backup-{stamp}"));
+            if let Some(parent) = data_dir.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::rename(data_dir, &backup).map_err(|e| e.to_string())?;
+            return Ok(Some(backup));
+        }
+    }
+    Ok(None)
+}
+
+fn load_or_create_session_secret(data_dir: &Path) -> Result<[u8; 32], String> {
+    let path = data_dir.join(SESSION_SECRET_FILE);
+    if let Ok(raw) = std::fs::read(&path)
+        && raw.len() == 32
+    {
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&raw);
+        return Ok(key);
+    }
+    let key: [u8; 32] = rand::random();
+    std::fs::write(&path, key).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(key)
 }
 
 fn remove_dir_retry(dir: &Path) {

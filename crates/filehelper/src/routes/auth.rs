@@ -2,23 +2,20 @@ use crate::auth;
 use crate::state::AppState;
 use axum::Json;
 use axum::extract::State;
-use axum::response::Response;
+use axum::http::StatusCode;
 
 pub async fn login(
     State(state): State<AppState>,
     conn: auth::ConnInfo,
-    Json(body): Json<auth::LoginRequest>,
-) -> Result<Response, crate::error::AppError> {
+    Json(body): Json<auth::AuthRequest>,
+) -> Result<Json<auth::AuthResponse>, crate::error::AppError> {
     auth::login(State(state), conn, Json(body)).await
 }
 
-pub async fn logout() -> impl axum::response::IntoResponse {
-    auth::logout().await
-}
-
-pub async fn session(
+pub async fn create(
     State(state): State<AppState>,
-    req: axum::http::Request<axum::body::Body>,
-) -> Result<Json<serde_json::Value>, crate::error::AppError> {
-    auth::session_check(State(state), req).await
+    conn: auth::ConnInfo,
+    Json(body): Json<auth::AuthRequest>,
+) -> Result<StatusCode, crate::error::AppError> {
+    auth::create_space(State(state), conn, Json(body)).await
 }
