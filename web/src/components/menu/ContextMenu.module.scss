@@ -5,14 +5,17 @@
   border-radius: 12px;
   box-shadow: var(--shadow-heavy);
   padding: 4px;
-  min-width: 160px;
+  min-width: 190px;
   animation: scaleIn 0.15s ease-out;
 }
 
 .item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  padding: 10px 16px;
+  min-height: 42px;
+  padding: 0 12px;
   border-radius: 8px;
   font-size: 14px;
   text-align: left;
@@ -22,5 +25,24 @@
 
   &:hover {
     background: var(--menu-hover);
+  }
+
+  &.danger {
+    color: var(--danger-color);
+
+    &:hover {
+      background: rgba(var(--danger-color-rgb), 0.1);
+    }
+  }
+}
+
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+
+  .danger & {
+    color: var(--danger-color);
   }
 }

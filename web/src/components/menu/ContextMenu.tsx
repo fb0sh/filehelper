@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './ContextMenu.module.scss';
 
-interface MenuItem {
+export interface MenuItem {
   label: string;
   onClick: () => void;
+  icon?: ReactNode;
+  danger?: boolean;
 }
 
 interface Props {
@@ -60,13 +62,14 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       {items.map((item, i) => (
         <button
           key={i}
-          className={styles.item}
+          className={`${styles.item} ${item.danger ? styles.danger : ''}`}
           onClick={() => {
             item.onClick();
             onClose();
           }}
         >
-          {item.label}
+          {item.icon && <span className={styles.itemIcon}>{item.icon}</span>}
+          <span>{item.label}</span>
         </button>
       ))}
     </div>,

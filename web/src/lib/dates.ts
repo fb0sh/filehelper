@@ -2,7 +2,8 @@ export function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
 }
 
 export function formatDateSeparator(dateStr: string): string {
@@ -30,5 +31,6 @@ export function formatFullDate(dateStr: string): string {
   ];
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} ${hours}:${minutes}`;
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} ${hours}:${minutes}:${seconds}`;
 }

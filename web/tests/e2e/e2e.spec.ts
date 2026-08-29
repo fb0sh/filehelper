@@ -74,30 +74,79 @@ test.describe('FileHelper E2E', () => {
     await server.stop();
   });
 
-  test('desktop search: right panel, jump to result', async ({ page }) => {
+  test('desktop search: topbar search mode with counter and navigation', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     await login(page, base, server.accessCode!);
 
-    const marker = `needle-${Date.now()} message 1`;
-    expect(await seedMessage(page, base, marker)).toBe(200);
+    const stamp = Date.now();
+    const markerA = `needle-${stamp}-a`;
+    const markerB = `needle-${stamp}-b`;
+    expect(await seedMessage(page, base, markerA)).toBe(200);
+    expect(await seedMessage(page, base, markerB)).toBe(200);
     await page.reload();
     await expect(page.locator('textarea[placeholder="Message"]')).toBeVisible();
 
+    // Click Search → header turns into the Telegram-style topbar search.
     await page.click('button[aria-label="Search"]');
     const input = page.locator('input[placeholder="Search messages..."]');
     await expect(input).toBeVisible();
-    // Chat stays visible: no fullscreen overlay.
+    // Chat stays visible: no right-side panel, no overlay.
     await expect(page.locator('textarea[placeholder="Message"]')).toBeVisible();
-    await input.fill('1');
-    const result = page.locator('button[class*="resultItem"]', { hasText: marker }).first();
-    await expect(result).toBeVisible({ timeout: 5000 });
+
+    await input.fill('needle');
+    await expect(page.locator('text=1 of 2').first()).toBeVisible({ timeout: 5000 });
     await shot(page, 'desktop-search.png');
 
-    await result.click();
+    // Navigate with ↑; the search mode must stay open after jumping.
+    await page.click('button[aria-label="Older match"]');
+    await expect(page.locator('text=2 of 2').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('input[placeholder="Search messages..."]')).toBeVisible();
+    await expect(page.locator('div[data-message-id]', { hasText: markerA }).first()).toBeVisible({ timeout: 5000 });
+
+    // X closes back to the normal header.
+    await page.click('button[aria-label="Close search"]');
     await expect(input).toBeHidden();
-    await expect(page.locator('div[data-message-id]', { hasText: marker }).first()).toBeVisible({ timeout: 5000 });
+    await server.stop();
+  });
+
+  test('scrolled up: new message shows the unread badge button', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    await login(page, base, server.accessCode!);
+
+    const batch = Date.now() % 100000;
+    for (let i = 0; i < 25; i++) await seedMessage(page, base, `hist-${batch}-${i}`);
+    await page.reload();
+    await expect(page.locator('textarea[placeholder="Message"]')).toBeVisible();
+    await page.waitForTimeout(600);
+
+    // Scroll up into history.
+    await page.evaluate(() => {
+      const el = document.querySelector('div[class*="container"]') as HTMLElement;
+      el.scrollTop = 0;
+      el.dispatchEvent(new Event('scroll'));
+    });
+    await page.waitForTimeout(300);
+
+    // A new message arrives while the user is scrolled up.
+    const fresh = `fresh-${Date.now()}`;
+    await seedMessage(page, base, fresh);
+    await page.waitForTimeout(800);
+
+    // Badge button visible with count, user NOT pulled to bottom.
+    const btn = page.locator('button[aria-label*="new messages"]');
+    await expect(btn).toBeVisible({ timeout: 5000 });
+    const badge = btn.locator('span').first();
+    await expect(badge).toHaveText('1');
+    await shot(page, 'desktop-scrolled-new-message.png');
+
+    // Click → back to bottom, badge clears.
+    await btn.click();
+    await expect(btn).toBeHidden({ timeout: 5000 });
+    await expect(page.locator(`text=${fresh}`).first()).toBeVisible();
     await server.stop();
   });
 
@@ -124,14 +173,15 @@ test.describe('FileHelper E2E', () => {
   });
 
   test('context menu on bottom message stays inside viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     await login(page, base, server.accessCode!);
-    const stamp = `menu-${Date.now()}`;
-    await seedMessage(page, base, stamp);
-    await page.reload();
-    await expect(page.locator('textarea[placeholder="Message"]')).toBeVisible();
-    await page.waitForTimeout(500);
+    const stamp = `menu-${Date.now()}.txt`;
+    await page.locator('input[type="file"]').setInputFiles({ name: stamp, mimeType: 'text/plain', buffer: Buffer.from('menu') });
+    await page.locator('button[aria-label="Cancel"]').waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+    await page.locator('div[data-message-id]', { hasText: stamp }).locator('button[aria-label="Download"]').first().waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(300);
 
     const bubble = page.locator('div[data-message-id]', { hasText: stamp }).last();
     await bubble.scrollIntoViewIfNeeded();
@@ -140,6 +190,11 @@ test.describe('FileHelper E2E', () => {
 
     const menu = page.locator('div[class*="menu"]').first();
     await expect(menu).toBeVisible({ timeout: 5000 });
+    // File message menu: Download + Delete always; Save as… when the
+    // native picker is available (Chromium secure context → yes).
+    await expect(menu.locator('text=Download')).toBeVisible();
+    await expect(menu.locator('text=Save as…')).toBeVisible();
+    await expect(menu.locator('text=Delete')).toBeVisible();
     const box = await menu.evaluate((el) => {
       const r = el.getBoundingClientRect();
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
@@ -148,7 +203,7 @@ test.describe('FileHelper E2E', () => {
     expect(box.top).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(1440);
     expect(box.bottom).toBeLessThanOrEqual(900);
-    await shot(page, 'desktop-context-menu-bottom.png');
+    await shot(page, 'desktop-context-menu.png');
     await page.keyboard.press('Escape');
     await server.stop();
   });

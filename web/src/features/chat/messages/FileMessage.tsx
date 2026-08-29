@@ -3,6 +3,7 @@ import { formatMessageTime } from '../../../lib/dates';
 import { formatBytes } from '../../../lib/bytes';
 import { getFileIconLabel, getFileIconColor } from '../../../lib/mime';
 import { Download } from 'lucide-react';
+import { triggerDownload } from '../../../lib/download';
 import styles from './FileMessage.module.scss';
 
 interface Props {
@@ -17,7 +18,7 @@ export function FileMessage({ message }: Props) {
   const color = getFileIconColor(label);
 
   const handleDownload = () => {
-    window.open(att.downloadUrl, '_blank');
+    triggerDownload(att.downloadUrl);
   };
 
   return (

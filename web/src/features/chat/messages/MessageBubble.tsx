@@ -7,6 +7,9 @@ import { ImageMessage } from './ImageMessage';
 import { VideoMessage } from './VideoMessage';
 import { AudioMessage } from './AudioMessage';
 import { ContextMenu } from '../../../components/menu/ContextMenu';
+import { triggerDownload } from '../../../lib/download';
+import { saveFileAs, supportsSaveAs } from '../../../lib/saveAs';
+import { Download, Save, Trash2, Copy } from 'lucide-react';
 import styles from './MessageBubble.module.scss';
 
 interface Props {
@@ -41,18 +44,19 @@ export function MessageBubble({ message }: Props) {
   const handleDownload = () => {
     const att = message.attachment;
     if (!att) return;
-    window.open(att.downloadUrl, '_blank');
+    triggerDownload(att.downloadUrl);
   };
+
+  // Only offered when the browser really supports the native picker.
+  const canSaveAs = message.attachment !== null && supportsSaveAs();
 
   const handleSaveAs = () => {
     const att = message.attachment;
-    if (!att) return;
-    const a = document.createElement('a');
-    a.href = att.downloadUrl;
-    a.download = att.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    if (!att || !supportsSaveAs()) return;
+    // Picker must be invoked synchronously inside the click gesture.
+    saveFileAs(att.downloadUrl, att.filename).catch(() => {
+      // user cancelled the picker or the stream failed — nothing to show
+    });
   };
 
   const handleDelete = () => {
@@ -63,15 +67,17 @@ export function MessageBubble({ message }: Props) {
 
   const menuItems = [];
   if (message.text) {
-    menuItems.push({ label: 'Copy', onClick: handleCopy });
+    menuItems.push({ label: 'Copy', icon: <Copy size={16} />, onClick: handleCopy });
   } else if (message.attachment) {
-    menuItems.push({ label: 'Copy filename', onClick: handleCopy });
+    menuItems.push({ label: 'Copy filename', icon: <Copy size={16} />, onClick: handleCopy });
   }
   if (message.attachment) {
-    menuItems.push({ label: 'Download', onClick: handleDownload });
-    menuItems.push({ label: 'Save as', onClick: handleSaveAs });
+    menuItems.push({ label: 'Download', icon: <Download size={16} />, onClick: handleDownload });
+    if (canSaveAs) {
+      menuItems.push({ label: 'Save as…', icon: <Save size={16} />, onClick: handleSaveAs });
+    }
   }
-  menuItems.push({ label: 'Delete', onClick: handleDelete });
+  menuItems.push({ label: 'Delete', icon: <Trash2 size={16} />, danger: true, onClick: handleDelete });
 
   const renderContent = () => {
     switch (message.kind) {

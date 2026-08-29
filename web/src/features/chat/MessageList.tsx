@@ -8,6 +8,7 @@ import { DateSeparator } from './DateSeparator';
 import { ScrollToBottom } from './ScrollToBottom';
 import { formatDateSeparator } from '../../lib/dates';
 import { isNearBottom, shouldLoadMore } from '../../lib/scroll';
+import { computeAddedNewest, decideNewMessage } from '../../lib/newMessages';
 import { contextToInfiniteData } from '../../lib/realtimeCache';
 import styles from './MessageList.module.scss';
 
@@ -20,7 +21,12 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevScrollHeight = useRef(0);
   const isLoadingMore = useRef(false);
+  // Was the user near the bottom *before* a new message rendered? Saved on
+  // every scroll so the decision never depends on post-render scrollHeight.
+  const wasNearBottomRef = useRef(true);
+  const previousNewestIdRef = useRef<string | undefined>(undefined);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -47,25 +53,50 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   });
 
   const allMessages = data?.pages.flatMap((p) => p.messages) ?? [];
+  // Keep the newest-first cache handy for the effect below.
+  const allMessagesRef = useRef(allMessages);
+  allMessagesRef.current = allMessages;
+  const newestId = allMessages[0]?.id;
+
   // Cache is newest-first; render old → new.
   const messages = [...allMessages].reverse();
 
+  // React to genuinely new messages (newest id changed), never to history
+  // pagination (which appends at the end and keeps the newest id).
   useEffect(() => {
-    if (containerRef.current && !isLoadingMore.current) {
-      const container = containerRef.current;
-      if (isNearBottom(container, 100)) {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }
+    const prev = previousNewestIdRef.current;
+    if (prev === undefined) {
+      // First load: record the newest id and land at the bottom.
+      previousNewestIdRef.current = newestId;
+      wasNearBottomRef.current = true;
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+      return;
     }
-  }, [messages.length, activeTasks.length]);
+    if (newestId === prev) return;
+
+    previousNewestIdRef.current = newestId;
+    const added = computeAddedNewest(prev, allMessagesRef.current);
+    const decision = decideNewMessage(wasNearBottomRef.current, added);
+
+    if (decision.kind === 'scroll') {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setNewMessageCount(0);
+      setShowScrollBtn(false);
+    } else if (decision.count > 0) {
+      setNewMessageCount((c) => c + decision.count);
+      setShowScrollBtn(true);
+    }
+  }, [newestId]);
 
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Scroll button state must be updated on every scroll, independent
-    // of pagination.
-    setShowScrollBtn(!isNearBottom(container, 200));
+    // Track "near bottom" on every scroll, before any pagination logic.
+    const nearBottom = isNearBottom(container, 150);
+    wasNearBottomRef.current = nearBottom;
+    setShowScrollBtn(!nearBottom);
+    if (nearBottom) setNewMessageCount(0);
 
     if (!shouldLoadMore(container.scrollTop, hasNextPage, isFetchingNextPage)) return;
 
@@ -115,40 +146,44 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   }
 
   return (
-    <div className={styles.container} ref={containerRef} onScroll={handleScroll}>
-      <div className={styles.messagesWrapper}>
-        {isFetchingNextPage && (
-          <div className={styles.loadingMore}>Loading...</div>
-        )}
-        {grouped.map((group, gi) => (
-          <div key={gi}>
-            <DateSeparator date={group.date} />
-            {group.messages.map((msg) => (
-              <div
-                key={msg.id}
-                data-message-id={msg.id}
-                className={highlightId === msg.id ? styles.highlighted : undefined}
-              >
-                <MessageBubble message={msg} />
-              </div>
-            ))}
-          </div>
-        ))}
-        {activeTasks.map((task) => (
-          <div key={task.id} style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 8px' }}>
-            <UploadMessage
-              task={task}
-              onCancel={cancelTask}
-              onRetry={retryTask}
-            />
-          </div>
-        ))}
-        <div ref={bottomRef} />
+    <div className={styles.viewport}>
+      <div className={styles.container} ref={containerRef} onScroll={handleScroll}>
+        <div className={styles.messagesWrapper}>
+          {isFetchingNextPage && (
+            <div className={styles.loadingMore}>Loading...</div>
+          )}
+          {grouped.map((group, gi) => (
+            <div key={gi}>
+              <DateSeparator date={group.date} />
+              {group.messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  data-message-id={msg.id}
+                  className={highlightId === msg.id ? styles.highlighted : undefined}
+                >
+                  <MessageBubble message={msg} />
+                </div>
+              ))}
+            </div>
+          ))}
+          {activeTasks.map((task) => (
+            <div key={task.id} style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 8px' }}>
+              <UploadMessage
+                task={task}
+                onCancel={cancelTask}
+                onRetry={retryTask}
+              />
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
       </div>
       <ScrollToBottom
         visible={showScrollBtn}
+        newMessageCount={newMessageCount}
         onClick={() => {
           bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+          setNewMessageCount(0);
           setShowScrollBtn(false);
         }}
       />

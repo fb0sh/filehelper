@@ -33,9 +33,15 @@ describe('formatSpeed', () => {
 });
 
 describe('formatMessageTime', () => {
-  it('formats time correctly', () => {
+  it('formats time with seconds', () => {
     const result = formatMessageTime('2024-01-15T14:30:00.000Z');
-    expect(result).toMatch(/^\d{2}:\d{2}$/);
+    expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+
+  it('includes seconds in the output', () => {
+    // 20:52:37 local
+    const d = new Date(2024, 0, 15, 20, 52, 37);
+    expect(formatMessageTime(d.toISOString())).toBe('20:52:37');
   });
 });
 
@@ -58,10 +64,12 @@ describe('formatDateSeparator', () => {
 });
 
 describe('formatFullDate', () => {
-  it('includes year and time', () => {
-    const result = formatFullDate('2024-01-15T14:30:00.000Z');
-    expect(result).toContain('2024');
-    expect(result).toMatch(/\d{2}:\d{2}/);
+  it('includes year, time and seconds', () => {
+    const d = new Date(2026, 7, 29, 20, 52, 37); // Aug 29 2026
+    const result = formatFullDate(d.toISOString());
+    expect(result).toContain('2026');
+    expect(result).toContain('20:52:37');
+    expect(result).toContain('August 29');
   });
 });
 

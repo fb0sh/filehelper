@@ -1,7 +1,9 @@
 .btn {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
+  // Near the right edge of the ~728px message/composer column, not the
+  // whole (possibly very wide) chat viewport.
+  right: max(16px, calc((100% - 728px) / 2 - 48px));
+  bottom: 12px;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -11,11 +13,29 @@
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  z-index: 3;
+  z-index: 10;
   animation: fadeIn 0.15s ease-out;
   transition: background var(--transition-fast);
 
   &:hover {
     background: var(--hover-color-secondary);
   }
+}
+
+.badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--primary-color);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: var(--shadow-light);
+  border: 1px solid var(--surface-color);
 }
