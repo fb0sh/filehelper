@@ -1,3 +1,5 @@
+@use '../styles/telegram-shell';
+
 .layout {
   position: relative;
   display: flex;
@@ -6,37 +8,11 @@
   width: 100vw;
   // Windowed shell: uniform outer gutter + rounded frame. overflow
   // clips the wallpaper layers (and floating-card shadows) to the
-  // shell's rounded corners. The background-color is the wallpaper
-  // base — the gradient layer fades to transparent, so it must be the
-  // green base, never a gray frame.
+  // shell's rounded corners.
   padding: var(--app-outer-padding);
   border-radius: var(--app-outer-radius);
   overflow: hidden;
-  background: var(--tg-wallpaper-base);
-
-  // ── The ONE wallpaper: covers the entire main content area, left to
-  //    right — behind the sidebar island AND the chat content. Two
-  //    layers: a soft gradient color field + the dense doodle tile. ──
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    background-image: var(--tg-wallpaper-gradient);
-    pointer-events: none;
-  }
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    background-image: var(--tg-wallpaper-image);
-    background-repeat: repeat;
-    background-size: var(--tg-wallpaper-size) var(--tg-wallpaper-size);
-    opacity: var(--tg-wallpaper-opacity);
-    pointer-events: none;
-  }
+  @include telegram-shell.tg-wallpaper;
 }
 
 // Transparent positioning columns — they only place the two visual
@@ -70,14 +46,18 @@
   // scrollIntoView must never scroll this container and shift the shell.
   overflow: clip;
   position: relative;
-  background: var(--tg-frame-color);
+  // Same wallpaper as desktop — the mobile chat floats on it; the
+  // sidebar panel is an opaque white sheet on top.
+  @include telegram-shell.tg-wallpaper;
 }
 
 .mobilePanel {
   position: absolute;
   inset: 0;
   transition: transform 0.3s ease;
-  background: var(--surface-color);
+  // Transparent: the chat panel lets the shared wallpaper show through.
+  // (The sidebar screen is opaque because the Sidebar card paints white.)
+  background: transparent;
 
   &.hidden {
     transform: translateX(100%);

@@ -440,6 +440,43 @@ test.describe('TG pixel-match geometry', () => {
     expect(Math.abs(h!.x + h!.width / 2 - (c!.x + c!.width / 2))).toBeLessThanOrEqual(1);
     // composer stays above the bottom edge
     expect(c!.y + c!.height).toBeLessThanOrEqual(844);
+    // ── Mobile uses the SAME wallpaper as desktop: the mobile layout
+    //    carries the gradient + doodle layers and the chat column is
+    //    transparent, so the chat floats on green, not white. ──
+    const mobileWp = await page.evaluate(() => {
+      const ml = document.querySelector('div[class*="mobileLayout"]')!;
+      const chat = document.querySelector('[data-tg="chat"]')!;
+      const mlStyle = getComputedStyle(ml);
+      const before = getComputedStyle(ml, '::before');
+      const after = getComputedStyle(ml, '::after');
+      return {
+        base: mlStyle.backgroundColor,
+        gradient: before.backgroundImage.slice(0, 60),
+        tile: after.backgroundImage.slice(0, 60),
+        tileOpacity: after.opacity,
+        chatBg: getComputedStyle(chat).backgroundColor,
+      };
+    });
+    expect(mobileWp.base).toBe('rgb(189, 205, 140)'); // same green base
+    expect(mobileWp.gradient).toContain('radial-gradient');
+    expect(mobileWp.tile).toContain('wallpaper.svg');
+    expect(parseFloat(mobileWp.tileOpacity)).toBeCloseTo(0.4, 3);
+    expect(mobileWp.chatBg).toBe('rgba(0, 0, 0, 0)'); // transparent chat column
+    // rendered pixels between messages are olive-green, not white
+    const shot = await page.screenshot();
+    const img = decodePng(shot);
+    let familyHits = 0;
+    let probes = 0;
+    for (let y = 260; y < 820; y += 40) {
+      for (let x = 30; x <= 350; x += 40) {
+        const p = pixelAt(img, x, y);
+        probes++;
+        if (rgbClose(p, [255, 255, 255], 6)) continue; // bubble interior
+        if (p[1] > p[0] && p[0] > p[2] && p[0] > 90) familyHits++;
+      }
+    }
+    expect(probes).toBeGreaterThan(30);
+    expect(familyHits / probes).toBeGreaterThan(0.6);
     // no horizontal overflow
     const ov = await page.evaluate(() => ({
       sw: document.body.scrollWidth,

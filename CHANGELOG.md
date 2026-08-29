@@ -3,6 +3,18 @@
 All notable changes to FileHelper are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## 2.0.1 — 2026-08-30
+
+### Fixes
+
+- **Mobile chat now uses the same Telegram wallpaper as desktop.** The
+  mobile layout previously painted a flat white/gray background; the
+  shared wallpaper layer (green gradient field + doodle tile) is now
+  applied to the mobile shell too, and the mobile chat column is
+  transparent so the header / messages / composer float on the same green
+  background. The mobile sidebar stays an opaque white sheet, matching
+  Telegram mobile.
+
 ## 2.0.0 — 2026-08-30
 
 ### Highlights
