@@ -4,7 +4,7 @@ import { authApi } from '../api';
 interface AuthState {
   isAuthenticated: boolean;
   loginError: string | null;
-  login: (password: string) => Promise<boolean>;
+  login: (code: string) => Promise<boolean>;
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
 }
@@ -12,13 +12,13 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   loginError: null,
-  login: async (password) => {
+  login: async (code) => {
     try {
-      await authApi.login({ password });
+      await authApi.login({ code });
       set({ isAuthenticated: true, loginError: null });
       return true;
     } catch (e) {
-      set({ loginError: e instanceof Error ? e.message : 'Invalid password' });
+      set({ loginError: e instanceof Error ? e.message : 'Invalid access code' });
       return false;
     }
   },

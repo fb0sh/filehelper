@@ -1,0 +1,153 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.panel {
+  width: min(420px, calc(100vw - 48px));
+  max-height: 80dvh;
+  background: var(--menu-background);
+  border-radius: 16px;
+  box-shadow: var(--shadow-heavy);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: scaleIn 0.15s ease-out;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.closeBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+
+  &:hover {
+    background: var(--hover-color);
+  }
+}
+
+.body {
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--menu-hover);
+  }
+
+  &.active {
+    color: var(--primary-color);
+  }
+}
+
+.check {
+  margin-left: auto;
+  color: var(--primary-color);
+}
+
+.statRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+
+  &.totalRow {
+    border-top: 1px solid var(--border-color);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+}
+
+.dangerBtn {
+  margin-top: 16px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--danger-color);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  transition: opacity var(--transition-fast);
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+.aboutLogo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 12px auto;
+}
+
+.aboutName {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.aboutVersion {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.aboutText {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 16px;
+  line-height: 1.5;
+}

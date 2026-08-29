@@ -11,10 +11,6 @@ pub async fn require_auth(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, AppError> {
-    if !state.config.auth_enabled {
-        return Ok(next.run(req).await);
-    }
-
     let is_mutation = matches!(req.method().as_str(), "POST" | "PUT" | "PATCH" | "DELETE");
     if is_mutation {
         let has_header = req
@@ -27,6 +23,11 @@ pub async fn require_auth(
         }
     }
 
-    super::session::verify_session(&state, &req)?;
+    let cookie_header = req
+        .headers()
+        .get("cookie")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    super::session::verify_session_cookie(&state.config.signing_key, cookie_header)?;
     Ok(next.run(req).await)
 }

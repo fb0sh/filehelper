@@ -8,7 +8,7 @@ use serde::Serialize;
 pub enum AppError {
     #[error("Authentication required")]
     AuthRequired,
-    #[error("Invalid password")]
+    #[error("Invalid access code")]
     InvalidPassword,
     #[error("Message not found")]
     MessageNotFound,

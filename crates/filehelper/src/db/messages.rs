@@ -414,6 +414,25 @@ pub struct NewMessage {
     pub attachment: Option<NewAttachment>,
 }
 
+// Delete every message/attachment/FTS row. Returns the storage names of
+// the files the caller must remove from disk. Access code is untouched.
+pub async fn clear_all_messages(pool: &SqlitePool) -> Result<Vec<String>, AppError> {
+    let names = sqlx::query_scalar::<_, String>("SELECT storage_name FROM attachments")
+        .fetch_all(pool)
+        .await?;
+
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM messages_fts")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM messages")
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    Ok(names)
+}
+
 pub async fn get_storage_stats(pool: &SqlitePool) -> Result<serde_json::Value, AppError> {
     let total = sqlx::query_scalar::<_, Option<i64>>(
         "SELECT COALESCE(SUM(size_bytes), 0) FROM attachments",

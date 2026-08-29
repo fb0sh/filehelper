@@ -1,19 +1,18 @@
-import { useState, useRef, FormEvent } from 'react';
+import { useState, FormEvent } from 'react';
 import { useAuthStore } from '../../stores/auth';
 import styles from './LoginPage.module.scss';
 
 export function LoginPage() {
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [focused, setFocused] = useState(false);
   const { login, loginError } = useAuthStore();
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!password.trim() || loading) return;
+    if (!code.trim() || loading) return;
     setLoading(true);
-    await login(password);
+    await login(code.trim());
     setLoading(false);
   };
 
@@ -27,15 +26,20 @@ export function LoginPage() {
           </svg>
         </div>
         <h1 className={styles.title}>FileHelper</h1>
-        <p className={styles.subtitle}>Enter your password to continue</p>
+        <p className={styles.subtitle}>Enter access code</p>
+        <p className={styles.hint}>
+          Enter the access code shown in the FileHelper terminal.
+        </p>
         <form onSubmit={handleSubmit} className={styles.form}>
-          <div className={`${styles.inputGroup} ${focused || password ? styles.focused : ''}`}>
-            <label className={styles.label}>Password</label>
+          <div className={`${styles.inputGroup} ${focused || code ? styles.focused : ''}`}>
+            <label className={styles.label}>Access code</label>
             <input
-              ref={inputRef}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="Access code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               className={styles.input}
@@ -44,7 +48,7 @@ export function LoginPage() {
           </div>
           {loginError && <p className={styles.error}>{loginError}</p>}
           <button type="submit" className={styles.submitBtn} disabled={loading}>
-            {loading ? '...' : 'Next'}
+            {loading ? '...' : 'Continue'}
           </button>
         </form>
       </div>

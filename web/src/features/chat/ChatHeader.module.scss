@@ -8,7 +8,7 @@
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   position: relative;
-  z-index: 2;
+  z-index: 10;
 }
 
 .left {
@@ -16,6 +16,13 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
 }
 
 .iconBtn {
@@ -60,4 +67,46 @@
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 1px;
+}
+
+// Dropdown menu (dropdown level: 100)
+.menuOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+.menu {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  background: var(--menu-background);
+  border-radius: 12px;
+  box-shadow: var(--shadow-heavy);
+  padding: 4px;
+  min-width: 180px;
+  z-index: 100;
+  animation: scaleIn 0.15s ease-out;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--menu-hover);
+  }
+}
+
+.menuDivider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-color);
 }

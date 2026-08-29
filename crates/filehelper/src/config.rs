@@ -1,92 +1,80 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+pub const SESSION_TTL_SECS: u64 = 30 * 86400; // 30 days
+pub const ACCESS_CODE_MIN: u32 = 100_000;
+pub const ACCESS_CODE_MAX: u32 = 999_999;
+
+// Cross-platform application data directory, matching the spec:
+//   Linux:   ~/.local/share/filehelper/
+//   macOS:   ~/Library/Application Support/FileHelper/
+//   Windows: %LOCALAPPDATA%\FileHelper\
+#[cfg(target_os = "macos")]
+const APP_DIR_NAME: &str = "FileHelper";
+#[cfg(target_os = "windows")]
+const APP_DIR_NAME: &str = "FileHelper";
+#[cfg(all(unix, not(target_os = "macos")))]
+const APP_DIR_NAME: &str = "filehelper";
+
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "filehelper",
     version = "0.1.0",
-    about = "Self-hosted file transfer assistant"
+    about = "A tiny cross-platform file transfer assistant for your local network"
 )]
 pub struct Config {
     /// Listen address
-    #[arg(long, default_value = "127.0.0.1:8080")]
+    #[arg(long, default_value = "0.0.0.0:8080")]
     pub addr: String,
 
-    /// Password for authentication
-    #[arg(long, env = "FILEHELPER_PASSWORD")]
+    /// Use this access code for this run only (does not overwrite the stored code)
+    #[arg(long)]
     pub password: Option<String>,
 
-    /// Path to a file containing the password
+    /// Override the data directory
     #[arg(long)]
-    pub password_file: Option<PathBuf>,
+    pub data_dir: Option<PathBuf>,
 
-    /// Data directory
-    #[arg(long, default_value = "./data")]
-    pub data_dir: PathBuf,
+    /// One-shot run: temp data dir, fresh access code, cleanup on exit
+    #[arg(long)]
+    pub ephemeral: bool,
+
+    /// Generate a new access code, invalidate old sessions, keep all data
+    #[arg(long)]
+    pub reset_code: bool,
 
     /// Maximum upload size in bytes
     #[arg(long, default_value = "10737418240")]
     pub max_upload_size: u64,
-
-    /// Session TTL (e.g. "30d", "24h")
-    #[arg(long, default_value = "30d")]
-    pub session_ttl: String,
-
-    /// Application display name
-    #[arg(long, default_value = "FileHelper")]
-    pub name: String,
-
-    /// Disable authentication (not recommended)
-    #[arg(long)]
-    pub no_auth: bool,
 }
 
 impl Config {
-    pub fn resolve_password(&self) -> Result<Option<String>, String> {
-        if self.no_auth {
-            return Ok(None);
+    /// Resolve the data directory for this run.
+    pub fn resolve_data_dir(&self) -> Result<PathBuf, String> {
+        if self.ephemeral {
+            let tmp = std::env::temp_dir().join(format!("filehelper-ephemeral-{}", random_hex(8)));
+            return Ok(tmp);
         }
-        if let Some(ref pw) = self.password {
-            return Ok(Some(pw.clone()));
+        if let Some(dir) = &self.data_dir {
+            return Ok(dir.clone());
         }
-        if let Some(ref path) = self.password_file {
-            let content = std::fs::read_to_string(path)
-                .map_err(|e| format!("Failed to read password file {}: {e}", path.display()))?;
-            return Ok(Some(content.trim().to_string()));
-        }
-        Err(
-            "No password set. Use --password, FILEHELPER_PASSWORD, --password-file, or --no-auth."
-                .to_string(),
-        )
+        default_app_data_dir()
     }
 
-    pub fn parse_session_ttl_secs(&self) -> Result<u64, String> {
-        parse_duration(&self.session_ttl)
+    /// Whether the persisted auth (access code hash + secret) should be
+    /// created/loaded. A runtime --password override skips persistence.
+    pub fn uses_persisted_auth(&self) -> bool {
+        self.password.is_none()
     }
 }
 
-fn parse_duration(s: &str) -> Result<u64, String> {
-    let s = s.trim();
-    if let Some(stripped) = s.strip_suffix('d') {
-        let days: u64 = stripped
-            .parse()
-            .map_err(|_| format!("Invalid duration: {s}"))?;
-        Ok(days * 86400)
-    } else if let Some(stripped) = s.strip_suffix('h') {
-        let hours: u64 = stripped
-            .parse()
-            .map_err(|_| format!("Invalid duration: {s}"))?;
-        Ok(hours * 3600)
-    } else if let Some(stripped) = s.strip_suffix('m') {
-        let mins: u64 = stripped
-            .parse()
-            .map_err(|_| format!("Invalid duration: {s}"))?;
-        Ok(mins * 60)
-    } else if let Some(stripped) = s.strip_suffix('s') {
-        stripped
-            .parse()
-            .map_err(|_| format!("Invalid duration: {s}"))
-    } else {
-        s.parse().map_err(|_| format!("Invalid duration: {s}"))
-    }
+pub fn default_app_data_dir() -> Result<PathBuf, String> {
+    directories::ProjectDirs::from("", "", APP_DIR_NAME)
+        .map(|d| d.data_dir().to_path_buf())
+        .ok_or_else(|| "Could not determine the application data directory".to_string())
+}
+
+fn random_hex(len: usize) -> String {
+    let bytes: Vec<u8> = (0..len).map(|_| rand::random::<u8>()).collect();
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }

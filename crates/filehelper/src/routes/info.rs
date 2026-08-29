@@ -7,7 +7,7 @@ pub async fn info(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "name": state.config.name,
         "version": "0.1.0",
-        "authEnabled": state.config.auth_enabled,
+        "authEnabled": true,
         "maxUploadSize": state.config.max_upload_size,
     }))
 }

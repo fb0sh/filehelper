@@ -108,3 +108,10 @@
     cursor: default;
   }
 }
+.hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: -24px 0 24px;
+  text-align: center;
+  line-height: 1.5;
+}

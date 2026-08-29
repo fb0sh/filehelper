@@ -6,9 +6,10 @@ use axum::response::Response;
 
 pub async fn login(
     State(state): State<AppState>,
-    Json(req): Json<auth::LoginRequest>,
+    conn: auth::ConnInfo,
+    Json(body): Json<auth::LoginRequest>,
 ) -> Result<Response, crate::error::AppError> {
-    auth::login(State(state), Json(req)).await
+    auth::login(State(state), conn, Json(body)).await
 }
 
 pub async fn logout() -> impl axum::response::IntoResponse {

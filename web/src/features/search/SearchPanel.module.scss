@@ -1,5 +1,6 @@
 // Desktop: fixed-width right column of the flex layout.
 .panel {
+  z-index: 20;
   width: 320px;
   height: 100dvh;
   background: var(--surface-color);
@@ -13,7 +14,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 20;
   background: var(--surface-color);
   display: flex;
   flex-direction: column;

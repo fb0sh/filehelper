@@ -2,39 +2,11 @@ mod common;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use common::{cleanup, session_cookie_header, setup_test_app, test_router};
+use common::{
+    cleanup, file_part, multipart_body, multipart_request, session_cookie_header, setup_test_app,
+    test_router,
+};
 use tower::ServiceExt; // for `oneshot`
-
-const BOUNDARY: &str = "----filehelpertest";
-
-fn multipart_body(parts: &[String]) -> Body {
-    let mut body = String::new();
-    for part in parts {
-        body.push_str(&format!("--{BOUNDARY}\r\n{part}\r\n"));
-    }
-    body.push_str(&format!("--{BOUNDARY}--\r\n"));
-    Body::from(body)
-}
-
-fn file_part(filename: &str, content: &str) -> String {
-    format!(
-        "Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: text/plain\r\n\r\n{content}"
-    )
-}
-
-fn multipart_request(uri: &str, body: Body, cookie: &str) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(
-            "content-type",
-            format!("multipart/form-data; boundary={BOUNDARY}"),
-        )
-        .header("cookie", cookie)
-        .header("x-filehelper-request", "1")
-        .body(body)
-        .unwrap()
-}
 
 async fn send_json(
     app: axum::Router,

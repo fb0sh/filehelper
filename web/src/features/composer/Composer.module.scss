@@ -1,10 +1,11 @@
 .composer {
   flex-shrink: 0;
   padding: 8px 16px 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
   background: var(--surface-color);
   border-top: 1px solid var(--border-color);
   position: relative;
-  z-index: 2;
+  z-index: 10;
 }
 
 .inner {

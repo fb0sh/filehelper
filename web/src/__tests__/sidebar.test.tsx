@@ -20,7 +20,7 @@ function renderSidebar() {
 describe('Sidebar', () => {
   beforeEach(() => {
     localStorage.clear();
-    useUIStore.setState({ theme: 'system', mobileChatOpen: false });
+    useUIStore.setState({ theme: 'system', mobileChatOpen: false, settingsOpen: false, settingsSection: 'appearance' });
     useAuthStore.setState({ isAuthenticated: true, loginError: null });
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
@@ -36,22 +36,45 @@ describe('Sidebar', () => {
     expect(screen.getByRole('menu')).toBeDefined();
   });
 
-  it('menu offers real theme actions and they apply', () => {
+  it('menu offers Storage / Appearance / About / Lock', () => {
     renderSidebar();
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Dark theme/ }));
-    expect(useUIStore.getState().theme).toBe('dark');
-    expect(localStorage.getItem('filehelper.theme')).toBe('dark');
+    expect(screen.getByRole('menuitem', { name: /Storage/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Appearance/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /About/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Lock/ })).toBeDefined();
   });
 
-  it('menu offers logout and it logs the user out', async () => {
+  it('Storage menu item opens the storage settings section', () => {
     renderSidebar();
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Log out/ }));
-    // logout fires POST /auth/logout; give it a tick.
+    fireEvent.click(screen.getByRole('menuitem', { name: /Storage/ }));
+    expect(useUIStore.getState().settingsOpen).toBe(true);
+    expect(useUIStore.getState().settingsSection).toBe('storage');
+  });
+
+  it('Lock logs the user out', async () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Lock/ }));
     await vi.waitFor(() => {
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
     });
+  });
+
+  it('sidebar search filters the single chat', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+    // Matching input keeps the chat row.
+    fireEvent.change(screen.getByLabelText('Search chats'), { target: { value: 'filehelper' } });
+    expect(screen.getByText('FileHelper')).toBeDefined();
+    // Non-matching input shows "No chats found".
+    fireEvent.change(screen.getByLabelText('Search chats'), { target: { value: 'zzz' } });
+    expect(screen.getByText('No chats found')).toBeDefined();
   });
 
   it('shows the latest message preview from the latest cache', async () => {

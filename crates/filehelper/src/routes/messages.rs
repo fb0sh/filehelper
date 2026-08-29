@@ -114,3 +114,25 @@ pub async fn get(
         .ok_or(AppError::MessageNotFound)?;
     Ok(Json(message))
 }
+
+// Clear all messages and stored files (Settings → Storage → Clear All).
+// The access code and its sessions are intentionally kept.
+pub async fn clear_all(State(state): State<AppState>) -> Result<Json<serde_json::Value>, AppError> {
+    let names = db::clear_all_messages(&state.db).await?;
+
+    let files_dir = state.config.files_dir.clone();
+    let trash_dir = state.config.trash_dir.clone();
+    for name in names {
+        match crate::files::storage::move_to_trash(&files_dir, &trash_dir, &name).await {
+            Ok(_) => {
+                let trash_dir = trash_dir.clone();
+                tokio::spawn(async move {
+                    let _ = tokio::fs::remove_file(trash_dir.join(&name)).await;
+                });
+            }
+            Err(e) => tracing::error!("Failed to move cleared file {name} to trash: {e}"),
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}

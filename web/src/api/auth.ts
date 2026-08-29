@@ -1,7 +1,7 @@
 import { request } from './client';
 
 export interface LoginRequest {
-  password: string;
+  code: string;
 }
 
 export interface LoginResponse {

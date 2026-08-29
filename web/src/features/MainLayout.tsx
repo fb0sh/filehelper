@@ -1,6 +1,7 @@
 import { Sidebar } from './sidebar/Sidebar';
 import { Chat } from './chat/Chat';
 import { SearchPanel } from './search/SearchPanel';
+import { SettingsPanel } from './settings/SettingsPanel';
 import { useUIStore } from '../stores/ui';
 import { useRealtimeStore } from '../stores/realtime';
 import { useSearchStore } from '../stores/search';
@@ -23,6 +24,7 @@ import styles from './MainLayout.module.scss';
 export function MainLayout() {
   const { setStatus } = useRealtimeStore();
   const mobileChatOpen = useUIStore((s) => s.mobileChatOpen);
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
   const searchOpen = useSearchStore((s) => s.open);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -64,6 +66,8 @@ export function MainLayout() {
 
   const searchPanel = searchOpen ? <SearchPanel /> : null;
 
+  const settings = settingsOpen ? <SettingsPanel /> : null;
+
   if (isMobile) {
     return (
       <>
@@ -77,6 +81,7 @@ export function MainLayout() {
           </div>
           {searchPanel}
         </div>
+        {settings}
       </>
     );
   }
@@ -89,6 +94,7 @@ export function MainLayout() {
         <Chat />
         {searchPanel}
       </div>
+      {settings}
     </>
   );
 }

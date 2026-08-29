@@ -12,23 +12,26 @@ async fn test_config_cli() {
         "--addr",
         "0.0.0.0:9090",
         "--password",
-        "mypass",
+        "123456",
         "--data-dir",
         "/tmp/fh-test",
         "--max-upload-size",
         "1048576",
-        "--session-ttl",
-        "7d",
-        "--name",
-        "TestApp",
+        "--ephemeral",
+        "--reset-code",
     ]);
     assert_eq!(config.addr, "0.0.0.0:9090");
-    assert_eq!(config.password, Some("mypass".to_string()));
-    assert_eq!(config.data_dir.to_string_lossy(), "/tmp/fh-test");
+    assert_eq!(config.password.as_deref(), Some("123456"));
+    assert_eq!(
+        config
+            .data_dir
+            .as_deref()
+            .map(|p| p.to_string_lossy().to_string()),
+        Some("/tmp/fh-test".to_string())
+    );
     assert_eq!(config.max_upload_size, 1048576);
-    assert_eq!(config.session_ttl, "7d");
-    assert_eq!(config.name, "TestApp");
-    assert!(!config.no_auth);
+    assert!(config.ephemeral);
+    assert!(config.reset_code);
 }
 
 #[tokio::test]
