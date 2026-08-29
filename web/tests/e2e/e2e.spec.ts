@@ -80,7 +80,29 @@ function uniqueCode(label: string): string {
   return `${label}-${Date.now() % 1000000}`;
 }
 
-test.describe('FileHelper v1.0 E2E', () => {
+test.describe('FileHelper v2.0 E2E', () => {
+  test('login screenshots: desktop + mobile CODE prompt', async ({ page }) => {
+    // Desktop (1584×960): fresh server → CODE prompt, empty and with a
+    // code typed (strength hint visible).
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    await page.setViewportSize({ width: 1584, height: 960 });
+    await page.goto(base);
+    await expect(page.locator('input[placeholder="••••••••••••••"]')).toBeVisible({ timeout: 20000 });
+    await page.waitForTimeout(400);
+    await shot(page, 'desktop-login.png');
+    await page.fill('input[placeholder="••••••••••••••"]', 'FileHelper#2026-安全!');
+    await page.waitForTimeout(300);
+    await shot(page, 'desktop-login-filled.png');
+
+    // Mobile (390×844): same CODE prompt full-bleed, clean state.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.fill('input[placeholder="••••••••••••••"]', '');
+    await page.waitForTimeout(400);
+    await shot(page, 'mobile-login.png');
+    await server.stop();
+  });
+
   test('desktop layout: sidebar + chat fill viewport', async ({ page }) => {
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
@@ -704,7 +726,7 @@ test.describe('FileHelper v1.0 E2E', () => {
     }
   });
 
-  test('lock: returns to Enter Code, re-login restores history; About shows 1.0.0', async ({ page }) => {
+  test('lock: returns to Enter Code, re-login restores history; About shows 2.0.0', async ({ page }) => {
     await page.setViewportSize({ width: 1584, height: 960 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
@@ -716,7 +738,7 @@ test.describe('FileHelper v1.0 E2E', () => {
     // About → version comes from the server info endpoint.
     await page.click('button[aria-label="Open menu"]');
     await page.locator('div[class*="menu"] button', { hasText: 'About' }).click();
-    await expect(page.locator('text=Version 1.0.0').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=Version 2.0.0').first()).toBeVisible({ timeout: 5000 });
     await page.keyboard.press('Escape');
 
     // Lock → back to the CODE prompt.

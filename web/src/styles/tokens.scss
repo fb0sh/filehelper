@@ -27,15 +27,36 @@
   --overlay-background: rgba(0, 0, 0, 0.4);
 
   // ── Telegram Web K shell tokens ─────────────────────────────
-  --tg-sidebar-width: 440px;
+  --sidebar-width: 430px;
   --tg-content-width: 840px;
   --tg-message-width: 800px;
   --tg-chat-gutter: 16px;
-  --tg-shell-radius: 20px;
+  --tg-shell-radius: 20px; // legacy, kept for compat
   --tg-floating-radius: 28px;
   --tg-bubble-radius: 14px;
   --tg-bubble-radius-small: 6px;
   --tg-composer-min-height: 56px;
+
+  // ── Windowed shell + floating sidebar card ──────────────────
+  // The shell owns ONE wallpaper that covers the whole main content
+  // area (behind the sidebar island AND the chat content, continuous
+  // left → right). Outer geometry knobs live on .layout only.
+  --app-outer-padding: 12px;
+  --app-outer-radius: 24px;
+  --app-column-gap: 12px;
+  // Sidebar island: the white floating card inside the transparent
+  // sidebar-column. Its radius/shadow are what make it read as a card.
+  --sidebar-card-radius: 28px;
+  --sidebar-card-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 12px 24px rgba(0, 0, 0, 0.08);
+  // Card-internal rhythm (Telegram-sidebar spacing).
+  --sidebar-inner-x: 12px;
+  --sidebar-top-padding: 12px;
+  --sidebar-bottom-padding: 10px;
+  // Slightly darker than --tg-frame-color so the shell's rounded corners
+  // are visible as a windowed-app ring around the whole app.
+  --app-window-bg: #c7ced6;
 
   --tg-frame-color: #d9dee4;
   --tg-surface-floating: rgba(255, 255, 255, 0.97);
@@ -47,16 +68,22 @@
   --tg-search-bg: #f1f3f5;
   --tg-date-bg: rgba(76, 152, 96, 0.88);
 
-  // Chat wallpaper — Telegram Web A reference values: base #bdcd8c
-  // (solid theme background), pattern stroke #77854b (olive line art),
-  // tile-layer opacity 0.375 (pattern intensity).
+  // Chat wallpaper — Telegram Web A reference: a soft multi-point
+  // gradient color field (light yellow-green / grass green / teal-green
+  // / creamy highlights) painted by the ::before layer, plus a dense
+  // olive doodle tile on ::after. Base is the solid fallback under both.
   --tg-wallpaper-base: #bdcd8c;
   --tg-wallpaper-image: url('/wallpaper.svg');
-  --tg-wallpaper-size: 512px;
-  --tg-wallpaper-opacity: 0.375;
+  --tg-wallpaper-size: 1024px;
+  --tg-wallpaper-opacity: 0.4;
+  --tg-wallpaper-gradient:
+    radial-gradient(95% 75% at 16% 8%, rgba(226, 233, 178, 0.6) 0%, rgba(226, 233, 178, 0) 55%),
+    radial-gradient(85% 70% at 84% 12%, rgba(207, 225, 154, 0.55) 0%, rgba(207, 225, 154, 0) 50%),
+    radial-gradient(110% 95% at 80% 86%, rgba(122, 176, 148, 0.5) 0%, rgba(122, 176, 148, 0) 58%),
+    radial-gradient(75% 65% at 18% 90%, rgba(215, 221, 170, 0.5) 0%, rgba(215, 221, 170, 0) 48%),
+    linear-gradient(155deg, rgba(216, 227, 174, 0.45) 0%, rgba(189, 205, 140, 0) 42%, rgba(140, 177, 130, 0.5) 100%);
 
   // Legacy aliases (kept so nothing else in the app depends on old names).
-  --sidebar-width: 440px;
   --header-height: 56px;
   --composer-min-height: 54px;
   --bubble-max-width: 560px;
@@ -102,6 +129,10 @@
   --overlay-background: rgba(0, 0, 0, 0.6);
 
   --tg-frame-color: #0c0f14;
+  --app-window-bg: #05070a;
+  --sidebar-card-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    0 12px 24px rgba(0, 0, 0, 0.4);
   --tg-surface-floating: rgba(35, 41, 54, 0.97);
   --tg-surface-floating-strong: rgba(35, 41, 54, 0.99);
   --tg-floating-shadow:
@@ -113,6 +144,10 @@
 
   --tg-wallpaper-base: #0e1621;
   --tg-wallpaper-image: url('/wallpaper.svg');
-  --tg-wallpaper-size: 512px;
-  --tg-wallpaper-opacity: 0.18;
+  --tg-wallpaper-size: 1024px;
+  --tg-wallpaper-opacity: 0.2;
+  --tg-wallpaper-gradient:
+    radial-gradient(95% 75% at 16% 8%, rgba(92, 118, 88, 0.5) 0%, rgba(92, 118, 88, 0) 55%),
+    radial-gradient(110% 95% at 80% 85%, rgba(38, 82, 82, 0.45) 0%, rgba(38, 82, 82, 0) 55%),
+    linear-gradient(155deg, rgba(76, 102, 74, 0.35) 0%, rgba(14, 22, 33, 0) 45%, rgba(28, 54, 50, 0.42) 100%);
 }

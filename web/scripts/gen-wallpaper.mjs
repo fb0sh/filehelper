@@ -1,10 +1,11 @@
 // FileHelper Telegram-style wallpaper tile generator.
 //
-// Produces web/public/wallpaper.svg — a seamless 512×512 doodle tile.
+// Produces web/public/wallpaper.svg — a seamless 1024×1024 doodle tile.
 // Colors follow the Telegram Web A runtime values:
-//   base: #bdcd8c (painted by CSS as --tg-wallpaper-base)
+//   base: #bdcd8c (painted by CSS as --tg-wallpaper-base, under a soft
+//         multi-point gradient color field in --tg-wallpaper-gradient)
 //   pattern stroke: #77854b (olive), intensity applied in CSS as
-//   --tg-wallpaper-opacity (0.375) on the tile layer — one opacity knob.
+//   --tg-wallpaper-opacity (0.4) on the tile layer — one opacity knob.
 //
 // Regenerate with:  node scripts/gen-wallpaper.mjs
 // Tuning knobs below (density/scale/rotation/seed) are the only things
@@ -18,17 +19,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, '../public/wallpaper.svg');
 
 // ── knobs ──────────────────────────────────────────────────────────────
-const TILE = 512;
-const SEED = 20260830;
-const COUNT = 92; // doodles per tile
-const MIN_DIST = 28; // min center distance (px) — overlap happens but not piles
-const SCALE_MIN = 0.4;
-const SCALE_MAX = 1.55;
-const ROT_MIN = -24; // degrees
-const ROT_MAX = 24;
+const TILE = 1024; // big tile ⇒ repetition is far apart, seams invisible
+const SEED = 20260831;
+const COUNT = 400; // doodles per tile (≈ 0.38/1024² — denser than before)
+const MIN_DIST = 34; // min center distance (px)
+const SCALE_MIN = 0.35;
+const SCALE_MAX = 2.1;
+const ROT_MIN = -26; // degrees
+const ROT_MAX = 26;
 const STROKE = '#77854b';
-const STROKE_WIDTH = 1.7;
-const ACCENTS = 42; // tiny abstract marks
+const STROKE_WIDTH = 1.4; // finer line work at the larger tile size
+const ACCENTS = 150; // tiny abstract marks filling the gaps
+const OPACITY_MIN = 0.72; // per-doodle fade → natural depth, less mechanical
 
 // deterministic PRNG (mulberry32)
 function rng(seed) {
@@ -43,6 +45,8 @@ function rng(seed) {
 }
 const rand = rng(SEED);
 const between = (min, max) => min + rand() * (max - min);
+// size distribution biased small (many little doodles, a few big ones)
+const pickScale = () => SCALE_MIN + Math.pow(rand(), 1.6) * (SCALE_MAX - SCALE_MIN);
 
 // ── doodle library (line art, local coords ≈ ±20) ──────────────────────
 const D = {
@@ -82,68 +86,84 @@ const D = {
   mushroom: '<path d="M-10 -1 C-10 -9 10 -9 10 -1 Z"/><path d="M-5 -1 L-5 8 L5 8 L5 -1"/>',
   acorn: '<path d="M-8 1 C-8 -4 8 -4 8 1 C8 6 4 9 0 9 C-4 9 -8 6 -8 1 Z"/><path d="M-5 1 L5 1"/><path d="M0 1 L0 -3"/>',
   pinguin: '<path d="M-7 -6 C-7 -12 7 -12 7 -6 L7 6 C7 10 -7 10 -7 6 Z"/><path d="M-4 -2 L4 -2 L4 2 L-4 2 Z"/><circle cx="-3" cy="-9" r="1"/><circle cx="3" cy="-9" r="1"/><path d="M-2 -12 L0 -15 L2 -12"/>',
+  butterfly: '<path d="M0 0 C-6 -8 -16 -6 -14 2 C-12 9 -3 7 0 1 Z"/><path d="M0 0 C6 -8 16 -6 14 2 C12 9 3 7 0 1 Z"/><path d="M0 0 C-4 7 -11 12 -13 9 C-15 6 -6 4 0 0 Z"/><path d="M0 0 C4 7 11 12 13 9 C15 6 6 4 0 0 Z"/><path d="M0 -1 L0 14"/>',
+  bird: '<path d="M-8 2 C-11 -4 -7 -9 -2 -8 C1 -11 8 -10 8 -4 C13 -4 13 2 9 3 C7 8 1 8 -3 5 C-6 7 -8 6 -8 2 Z"/><path d="M6 -3 L10 -6 L7 -1"/>',
+  snail: '<circle cx="-4" cy="0" r="7"/><path d="M-4 0 a3.5 3.5 0 0 1 7 0 a7 7 0 0 1 -14 0"/><path d="M3 0 C8 0 11 3 14 8"/><path d="M11 6 L14 9 L12 10"/><circle cx="-4" cy="0" r="1.4"/>',
+  tree: '<path d="M0 4 L0 16"/><circle cx="0" cy="-6" r="10"/><path d="M0 -16 C-4 -12 -4 -8 0 -4 C4 -8 4 -12 0 -16 Z"/>',
+  umbrella: '<path d="M-12 -2 A12 12 0 0 1 12 -2 Z"/><path d="M0 -2 L0 8"/><path d="M0 8 C-2 10 -1 12 1 12 C3 12 2 10 0 8 Z"/>',
+  envelope: '<rect x="-11" y="-8" width="22" height="16" rx="2"/><path d="M-11 -8 L0 1 L11 -8"/>',
+  pencil: '<rect x="-3" y="-13" width="6" height="19" rx="1.5"/><path d="M-3 -13 L0 -19 L3 -13"/><path d="M-3 6 L3 6"/>',
+  watermelon: '<path d="M-12 0 A12 12 0 0 1 12 0 Z"/><path d="M-12 0 L12 0"/><circle cx="-6" cy="-4" r="1.4"/><circle cx="0" cy="-6" r="1.4"/><circle cx="6" cy="-4" r="1.4"/><circle cx="-3" cy="2" r="1.4"/><circle cx="3" cy="2" r="1.4"/>',
+  key: '<circle cx="-7" cy="-6" r="4.5"/><path d="M-2.5 -6 L12 -6"/><path d="M8 -6 L8 -1"/><path d="M11 -6 L11 -1"/>',
+  globe: '<circle r="10"/><path d="M-10 0 L10 0"/><path d="M0 -10 A7 7 0 0 0 0 10 A7 7 0 0 0 0 -10"/><path d="M-7 -3 L7 3 M-7 3 L7 -3"/><path d="M-3 10 L-3 14 L3 14 L3 10"/>',
+  snowman: '<circle cy="-9" r="6"/><circle cy="2" r="8"/><path d="M0 -15 L0 -19"/><path d="M-10 0 L-14 0 M10 0 L14 0"/><circle cx="-2.5" cy="-10" r="1"/><circle cx="2.5" cy="-10" r="1"/><path d="M-2 3 L2 3"/>',
+  mug: '<path d="M-9 -6 L-9 6 C-9 10 -2 10 -2 6 L-2 -6 Z"/><path d="M-2 -4 C4 -6 6 -2 4 2 C3 5 -1 5 -2 3"/><path d="M-6 -9 C-8 -13 -4 -14 -3 -11"/>',
 };
 
 const KEYS = Object.keys(D);
-const RADIUS = 22; // doodle bounding radius for wrap/overlap math (scaled)
+const RADIUS = 26; // doodle bounding radius for wrap/overlap math (scaled)
 
-// ── scatter placement (not grid-like: seeded random, min distance) ─────
+// ── scatter placement (seeded random, min distance, size-biased small) ─
 const placed = [];
 for (let i = 0; i < COUNT; i++) {
   let x = 0;
   let y = 0;
   let ok = false;
-  for (let attempt = 0; attempt < 120 && !ok; attempt++) {
+  for (let attempt = 0; attempt < 160 && !ok; attempt++) {
     x = between(0, TILE);
     y = between(0, TILE);
     ok = placed.every((p) => Math.hypot(p.x - x, p.y - y) >= MIN_DIST);
   }
-  const scale = between(SCALE_MIN, SCALE_MAX);
+  const scale = pickScale();
   const rot = between(ROT_MIN, ROT_MAX);
+  const opacity = between(OPACITY_MIN, 1);
   const name = KEYS[Math.floor(rand() * KEYS.length)];
   const r = RADIUS * scale;
-  placed.push({ x, y, scale, rot, name, r });
+  placed.push({ x, y, scale, rot, opacity, name, r });
 }
 
 // ── emit ───────────────────────────────────────────────────────────────
-function doodleG(x, y, scale, rot, inner) {
-  return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)})">${inner}</g>`;
+function doodleG(x, y, scale, rot, opacity, inner) {
+  return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)})" opacity="${opacity.toFixed(3)}">${inner}</g>`;
 }
 
 const groups = [];
 for (const p of placed) {
   const inner = D[p.name];
-  groups.push(doodleG(p.x, p.y, p.scale, p.rot, inner));
+  groups.push(doodleG(p.x, p.y, p.scale, p.rot, p.opacity, inner));
   // seamless wrap: mirror across tile edges
-  if (p.x - p.r < 0) groups.push(doodleG(p.x + TILE, p.y, p.scale, p.rot, inner));
-  if (p.x + p.r > TILE) groups.push(doodleG(p.x - TILE, p.y, p.scale, p.rot, inner));
-  if (p.y - p.r < 0) groups.push(doodleG(p.x, p.y + TILE, p.scale, p.rot, inner));
-  if (p.y + p.r > TILE) groups.push(doodleG(p.x, p.y - TILE, p.scale, p.rot, inner));
-  if (p.x - p.r < 0 && p.y - p.r < 0) groups.push(doodleG(p.x + TILE, p.y + TILE, p.scale, p.rot, inner));
-  if (p.x + p.r > TILE && p.y + p.r > TILE) groups.push(doodleG(p.x - TILE, p.y - TILE, p.scale, p.rot, inner));
+  if (p.x - p.r < 0) groups.push(doodleG(p.x + TILE, p.y, p.scale, p.rot, p.opacity, inner));
+  if (p.x + p.r > TILE) groups.push(doodleG(p.x - TILE, p.y, p.scale, p.rot, p.opacity, inner));
+  if (p.y - p.r < 0) groups.push(doodleG(p.x, p.y + TILE, p.scale, p.rot, p.opacity, inner));
+  if (p.y + p.r > TILE) groups.push(doodleG(p.x, p.y - TILE, p.scale, p.rot, p.opacity, inner));
+  if (p.x - p.r < 0 && p.y - p.r < 0) groups.push(doodleG(p.x + TILE, p.y + TILE, p.scale, p.rot, p.opacity, inner));
+  if (p.x + p.r > TILE && p.y + p.r > TILE) groups.push(doodleG(p.x - TILE, p.y - TILE, p.scale, p.rot, p.opacity, inner));
 }
 
-// small abstract accents (dot clusters, tiny pluses, dashes)
+// small abstract accents (dot clusters, tiny pluses, dashes, sparkles)
 const accents = [];
 const accentKind = () => {
-  const k = Math.floor(rand() * 4);
+  const k = Math.floor(rand() * 5);
   if (k === 0) return '<circle r="1.8"/>';
   if (k === 1) return '<path d="M-4 0 L4 0 M0 -4 L0 4"/>';
   if (k === 2) return '<path d="M-5 0 L-2.5 -3.5 L0 0 L2.5 -3.5 L5 0"/>';
-  return '<circle r="1.2"/><circle cx="3.2" cy="0" r="1.2"/><circle cx="-3.2" cy="0" r="1.2"/>';
+  if (k === 3) return '<circle r="1.2"/><circle cx="3.2" cy="0" r="1.2"/><circle cx="-3.2" cy="0" r="1.2"/>';
+  return '<path d="M-4 -4 L4 4 M4 -4 L-4 4"/>';
 };
 for (let i = 0; i < ACCENTS; i++) {
   const x = between(0, TILE);
   const y = between(0, TILE);
-  const s = between(0.55, 0.95);
-  const r = between(-30, 30);
-  accents.push(doodleG(x, y, s, r, accentKind()));
+  const s = between(0.5, 1.1);
+  const r = between(-35, 35);
+  const o = between(0.6, 1);
+  accents.push(doodleG(x, y, s, r, o, accentKind()));
 }
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${TILE}" height="${TILE}" viewBox="0 0 ${TILE} ${TILE}">
   <!-- FileHelper wallpaper tile, seamless ${TILE}x${TILE}. Olive line-art
        doodles (stroke ${STROKE}); tile-layer opacity is controlled by CSS
-       (var tg-wallpaper-opacity = 0.375), the base by var tg-wallpaper-base.
+       (var tg-wallpaper-opacity = 0.4), the base + gradient color field by
+       var tg-wallpaper-base / var tg-wallpaper-gradient.
        Regenerate: node scripts/gen-wallpaper.mjs -->
   <rect width="${TILE}" height="${TILE}" fill="none"/>
   <g fill="none" stroke="${STROKE}" stroke-width="${STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round">

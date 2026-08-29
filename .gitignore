@@ -29,6 +29,9 @@ tests/visual/
 playwright-report/
 test-results/
 
+# Generated acceptance screenshots
+web/scripts/shots/
+
 # Rust
 **/*.rs.bk
 

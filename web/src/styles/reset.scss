@@ -24,8 +24,9 @@ body {
   font-size: var(--font-size-md);
   line-height: var(--line-height);
   color: var(--text-primary);
-  // Neutral "window frame" visible around the rounded app shell.
-  background: var(--tg-frame-color);
+  // One shade darker than the app-shell frame so the shell's rounded
+  // corners read as a windowed-app ring around the whole UI.
+  background: var(--app-window-bg);
   overflow: clip;
   height: 100dvh;
   width: 100vw;

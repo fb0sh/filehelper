@@ -86,6 +86,10 @@ encrypted messages and files.
 
 ### Desktop
 
+| Login | Login with code |
+| --- | --- |
+| ![Login](docs/screenshots/desktop-login.png) | ![Login with code](docs/screenshots/desktop-login-filled.png) |
+
 | Main | Search |
 | --- | --- |
 | ![Main](docs/screenshots/desktop-main.png) | ![Search](docs/screenshots/desktop-search.png) |
@@ -108,9 +112,13 @@ are searched exactly like message text.
 
 ### Mobile
 
-| Chat | Selection |
+| Login | Chat |
 | --- | --- |
-| ![Mobile chat](docs/screenshots/mobile-chat.png) | ![Mobile selection](docs/screenshots/mobile-selection.png) |
+| ![Mobile login](docs/screenshots/mobile-login.png) | ![Mobile chat](docs/screenshots/mobile-chat.png) |
+
+| Selection |
+| --- |
+| ![Mobile selection](docs/screenshots/mobile-selection.png) |
 
 All screenshots are captures of the real application running over
 end-to-end encrypted demo data.

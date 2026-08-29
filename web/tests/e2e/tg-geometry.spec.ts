@@ -149,17 +149,17 @@ test.describe('TG pixel-match geometry', () => {
 
     const { h, r, c, s, ch } = await boxes(page);
 
-    // ── Shell: 8px gutter, rounded panes, no page scrollbar ──
-    expect(s.x).toBeCloseTo(8, 0);
-    expect(s.y).toBeCloseTo(8, 0);
-    expect(s.width).toBeCloseTo(440, 1);
-    expect(s.height).toBeCloseTo(944, 1);
-    expect(ch.x).toBeCloseTo(448, 0);
-    expect(ch.width).toBeCloseTo(1128, 1);
+    // ── Shell: 12px outer gutter, rounded panes, no page scrollbar ──
+    expect(s.x).toBeCloseTo(12, 0);
+    expect(s.y).toBeCloseTo(12, 0);
+    expect(s.width).toBeCloseTo(430, 1);
+    expect(s.height).toBeCloseTo(936, 1);
+    expect(ch.x).toBeCloseTo(454, 0);
+    expect(ch.width).toBeCloseTo(1118, 1);
 
     // ── Floating header pill ──
     expect(h.height).toBeCloseTo(56, 1);
-    expect(h.y).toBeCloseTo(24, 1); // 8 shell + 16 gutter
+    expect(h.y).toBeCloseTo(28, 1); // 12 shell + 16 gutter
     expect(h.width).toBeCloseTo(840, 1); // min(840, chat-32)
     // wallpaper visible around the pill (not a full-width strip)
     expect(h.x).toBeGreaterThan(ch.x + 100);
@@ -167,12 +167,12 @@ test.describe('TG pixel-match geometry', () => {
     // ── Floating composer pill ──
     expect(c.width).toBeCloseTo(840, 1);
     expect(c.height).toBeCloseTo(56, 1);
-    expect(c.y + c.height).toBeLessThanOrEqual(952); // 8px shell gutter at bottom
-    expect(c.y).toBeCloseTo(880, 2); // 952 - 16 margin - 56 height
+    expect(c.y + c.height).toBeLessThanOrEqual(948); // 12px shell gutter at bottom
+    expect(c.y).toBeCloseTo(876, 2); // 948 - 16 margin - 56 height
 
     // ── Centered message rail ──
     expect(r.width).toBeCloseTo(800, 1);
-    expect(r.x).toBeCloseTo(612, 1);
+    expect(r.x).toBeCloseTo(613, 1);
 
     // ── Shared center axis: header == rail == composer (±1px) ──
     const hcx = h.x + h.width / 2;
@@ -252,7 +252,7 @@ test.describe('TG pixel-match geometry', () => {
     const wpA = pixelAt(img, Math.round(ch.x + ch.width - 60), 300); // far right
     const wpB = pixelAt(img, Math.round(r.x + r.width + 30), 400);
     for (const p of [wpA, wpB]) {
-      // Telegram Web A olive base #bdcd8c ≈ rgb(189, 205, 140)
+      // Telegram Web A olive family (gradient field over base #bdcd8c)
       expect(p[1]).toBeGreaterThan(p[0]); // g > r (green-ish)
       expect(p[0]).toBeGreaterThan(p[2]); // r > b (yellow-green, not mint/blue)
       expect(p[0]).toBeLessThan(245); // not a white surface
@@ -266,37 +266,70 @@ test.describe('TG pixel-match geometry', () => {
       expect(p[1]).toBeGreaterThan(p[0]); // green-ish wallpaper family
       expect(p[0]).toBeGreaterThan(p[2]);
     }
-    // base is a solid color: two distant points share the olive family
-    const tl = pixelAt(img, Math.round(ch.x + 12), Math.round(ch.y + 12));
-    const br = pixelAt(img, Math.round(ch.x + ch.width - 12), Math.round(ch.y + ch.height - 12));
-    expect(Math.abs(tl[0] - br[0])).toBeLessThanOrEqual(10);
-    expect(Math.abs(tl[1] - br[1])).toBeLessThanOrEqual(10);
+    // base is a soft gradient color field, not a flat color: distant points
+    // stay in the olive family but the top-left is brighter than the
+    // bottom-right (the spatial gradient direction)
+    const tl = pixelAt(img, Math.round(ch.x + 14), Math.round(ch.y + 14));
+    const br = pixelAt(img, Math.round(ch.x + ch.width - 14), Math.round(ch.y + ch.height - 14));
+    const lum = (p: number[]) => p[0] + p[1] + p[2];
+    for (const p of [tl, br]) {
+      expect(p[1]).toBeGreaterThan(p[0]);
+      expect(p[0]).toBeGreaterThan(p[2]);
+      expect(p[0]).toBeGreaterThan(90); // not black
+    }
+    // gradient exists: bottom-right is deeper (darker) than top-left
+    expect(lum(br)).toBeLessThan(lum(tl));
+    expect(lum(tl) - lum(br)).toBeGreaterThan(6);
 
-    // ── Doodles render over the base (darker olive strokes) ──
-    // stroke #77854b @ 0.375 over #bdcd8c ≈ rgb(163, 178, 116), clearly
-    // darker than the plain base (189, 205, 140).
-    let dark = 0;
-    for (let y = 120; y < 800; y += 1) {
-      for (let x = Math.round(r.x + r.width + 10); x < ch.x + ch.width - 4; x += 1) {
-        const [rr, gg, bb] = pixelAt(img, x, y);
-        if (rr + gg + bb < 189 + 205 + 140 - 40) dark++;
+    // ── Doodles render over the gradient (darker olive strokes) ──
+    // Count pixels notably darker than the local region mean — robust to
+    // the gradient (the old fixed threshold assumed a flat base).
+    let sum = 0;
+    let n = 0;
+    const region: number[][] = [];
+    for (let y = 140; y < 780; y += 2) {
+      for (let x = Math.round(ch.x + ch.width - 220); x < ch.x + ch.width - 30; x += 2) {
+        const p = pixelAt(img, x, y);
+        sum += p[0] + p[1] + p[2];
+        region.push(p);
+        n++;
       }
     }
-    expect(dark).toBeGreaterThan(150);
+    const regionMean = sum / n;
+    let dark = 0;
+    for (const p of region) {
+      if (p[0] + p[1] + p[2] < regionMean - 28) dark++;
+    }
+    expect(dark).toBeGreaterThan(120); // dense, visible line art
 
-    // ── Wallpaper layering: solid base on .chat, doodle tile on ::before ──
+    // ── Wallpaper layering: the SHELL owns the one full-area wallpaper;
+    //    gradient color field on ::before, doodle tile on ::after ──
     const bgColor = await page
-      .locator('[data-tg="chat"]')
+      .locator('[data-tg="shell"]')
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgColor).toBe('rgb(189, 205, 140)'); // #bdcd8c
-    const tile = await page
-      .locator('[data-tg="chat"]')
+    const gradient = await page
+      .locator('[data-tg="shell"]')
       .evaluate((el) => getComputedStyle(el, '::before').backgroundImage);
+    expect(gradient).toContain('radial-gradient');
+    const tile = await page
+      .locator('[data-tg="shell"]')
+      .evaluate((el) => getComputedStyle(el, '::after').backgroundImage);
     expect(tile).toContain('wallpaper.svg');
     const tileOpacity = await page
-      .locator('[data-tg="chat"]')
-      .evaluate((el) => getComputedStyle(el, '::before').opacity);
-    expect(parseFloat(tileOpacity)).toBeCloseTo(0.375, 3);
+      .locator('[data-tg="shell"]')
+      .evaluate((el) => getComputedStyle(el, '::after').opacity);
+    expect(parseFloat(tileOpacity)).toBeCloseTo(0.4, 3);
+    // wallpaper is continuous across the whole shell: pixels left of the
+    // sidebar card, in the sidebar↔chat gap, and right of the rail are
+    // all the same olive-green family (no gray gutter, no split).
+    const gapPx = pixelAt(img, Math.round(ch.x - 6), 500);
+    const ringPx = pixelAt(img, Math.round(s.x - 6), 500);
+    for (const p of [gapPx, ringPx]) {
+      expect(p[1]).toBeGreaterThan(p[0]); // green-ish wallpaper family
+      expect(p[0]).toBeGreaterThan(p[2]);
+      expect(p[0]).toBeGreaterThan(90);
+    }
 
     // ── Scroll-to-bottom button anchored to the composer rail ──
     // The list is too short to scroll yet — seed filler history via the
@@ -352,10 +385,10 @@ test.describe('TG pixel-match geometry', () => {
     await sendText(page, 'small viewport probe');
 
     const { h, r, c, ch } = await boxes(page);
-    // chat width = 1280 - 16 - 440 = 824; pill width = min(840, 792) = 792
-    expect(h.width).toBeCloseTo(792, 1);
-    expect(c.width).toBeCloseTo(792, 1);
-    expect(r.width).toBeCloseTo(792, 1);
+    // chat width = 1280 - 24 - 430 - 12 = 814; pill width = min(840, 782) = 782
+    expect(h.width).toBeCloseTo(782, 1);
+    expect(c.width).toBeCloseTo(782, 1);
+    expect(r.width).toBeCloseTo(782, 1);
     expect(Math.abs(h.x + h.width / 2 - (ch.x + ch.width / 2))).toBeLessThanOrEqual(1);
     expect(Math.abs(r.x + r.width / 2 - (ch.x + ch.width / 2))).toBeLessThanOrEqual(1);
     expect(Math.abs(c.x + c.width / 2 - (ch.x + ch.width / 2))).toBeLessThanOrEqual(1);
@@ -536,19 +569,22 @@ test.describe('TG pixel-match geometry', () => {
     await page.waitForTimeout(200);
     const dark = await page.evaluate(() => {
       const hdr = getComputedStyle(document.querySelector('[data-tg="chat-header"]')!);
-      const ch = getComputedStyle(document.querySelector('[data-tg="chat"]')!);
-      const before = getComputedStyle(document.querySelector('[data-tg="chat"]')!, '::before');
+      const shell = getComputedStyle(document.querySelector('[data-tg="shell"]')!);
+      const before = getComputedStyle(document.querySelector('[data-tg="shell"]')!, '::before');
+      const after = getComputedStyle(document.querySelector('[data-tg="shell"]')!, '::after');
       return {
         headerBg: hdr.backgroundColor,
-        base: ch.backgroundColor,
-        tile: before.backgroundImage.slice(0, 200),
-        opacity: before.opacity,
+        base: shell.backgroundColor,
+        gradient: before.backgroundImage.slice(0, 200),
+        tile: after.backgroundImage.slice(0, 200),
+        opacity: after.opacity,
       };
     });
     expect(dark.headerBg).toBe('rgba(35, 41, 54, 0.97)');
     expect(dark.base).toBe('rgb(14, 22, 33)'); // #0e1621
+    expect(dark.gradient).toContain('radial-gradient');
     expect(dark.tile).toContain('wallpaper.svg');
-    expect(parseFloat(dark.opacity)).toBeCloseTo(0.18, 3);
+    expect(parseFloat(dark.opacity)).toBeCloseTo(0.2, 3);
 
     await server.stop();
   });

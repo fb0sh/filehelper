@@ -101,9 +101,13 @@ export function MainLayout() {
   return (
     <>
       {dragOver && <DropOverlay />}
-      <div className={styles.layout}>
-        <Sidebar />
-        <Chat />
+      <div className={styles.layout} data-tg="shell">
+        <div className={styles.sidebarColumn}>
+          <Sidebar />
+        </div>
+        <div className={styles.chatColumn}>
+          <Chat />
+        </div>
       </div>
       <AttachmentComposerModal />
       {settings}

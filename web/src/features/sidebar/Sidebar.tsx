@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { messagesApi, messageKeys } from '../../api';
 import { formatMessageTime } from '../../lib/dates';
@@ -6,7 +6,7 @@ import { decryptEncryptedMessage } from '../../lib/crypto/messages';
 import { loadCryptoSession } from '../../lib/crypto/session';
 import type { DecryptedMessage } from '../../lib/crypto/messages';
 import styles from './Sidebar.module.scss';
-import { Menu, Search as SearchIcon, HardDrive, Palette, Info, Lock, Check } from 'lucide-react';
+import { Menu, Search as SearchIcon, HardDrive, Palette, Info, Lock, Check, Pencil } from 'lucide-react';
 import { useUIStore } from '../../stores/ui';
 import { useAuthStore } from '../../stores/auth';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -16,6 +16,7 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'personal' | 'unread'>('all');
   const [lastDecrypted, setLastDecrypted] = useState<DecryptedMessage | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const setMobileChatOpen = useUIStore((s) => s.setMobileChatOpen);
   const openSettings = useUIStore((s) => s.openSettings);
   const { lock } = useAuthStore();
@@ -78,6 +79,7 @@ export function Sidebar() {
         <div className={styles.searchBar}>
           <SearchIcon size={18} className={styles.searchIcon} />
           <input
+            ref={searchRef}
             type="text"
             placeholder="Search"
             className={styles.searchInput}
@@ -134,6 +136,19 @@ export function Sidebar() {
           <div className={styles.noChats}>No chats found</div>
         )}
       </div>
+
+      {/* Telegram-style FAB: single-chat "new message" affordance — focuses
+          the search so a chat can be found; real, not decorative. */}
+      {!isMobile && (
+        <button
+          className={styles.fab}
+          onClick={() => { searchRef.current?.focus(); searchRef.current?.select(); }}
+          aria-label="New chat"
+          title="New chat"
+        >
+          <Pencil size={22} />
+        </button>
+      )}
 
       {menuOpen && (
         <>

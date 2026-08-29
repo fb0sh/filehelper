@@ -1,10 +1,12 @@
 .sidebar {
-  width: var(--tg-sidebar-width);
-  min-width: var(--tg-sidebar-width);
+  // The floating white island. It fills its transparent column and is
+  // shaped purely as a card: big radius, soft layered shadow, clipped
+  // contents. Width/height come from the column — not from here.
+  width: 100%;
   height: 100%;
   background: var(--surface-color);
-  border-radius: var(--tg-shell-radius) 0 0 var(--tg-shell-radius);
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+  border-radius: var(--sidebar-card-radius);
+  box-shadow: var(--sidebar-card-shadow);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -12,18 +14,20 @@
   overflow: hidden;
 }
 
+// ── Card-internal rhythm: top row / search / tabs / list ──────
+// Horizontal rhythm is one token (--sidebar-inner-x) everywhere; the
+// vertical gaps are top-row padding, chips paddings, list bottom.
 .header {
-  height: 60px;
   display: flex;
   align-items: center;
-  padding: 8px 12px;
-  gap: 6px;
+  gap: 8px;
+  padding: var(--sidebar-top-padding) var(--sidebar-inner-x) 0;
   flex-shrink: 0;
 }
 
 .iconBtn {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -39,9 +43,9 @@
 
 .searchBar {
   flex: 1;
-  height: 42px;
+  height: 48px;
   background: var(--tg-search-bg);
-  border-radius: 21px;
+  border-radius: 24px;
   display: flex;
   align-items: center;
   padding: 0 14px;
@@ -77,40 +81,43 @@
   }
 }
 
-// Telegram-style filter chips (All / Personal / Unread) with count pills.
+// Telegram-style filter tabs: a light rounded group container with the
+// active segment highlighted as a white pill (Desktop 5.x filter bar).
 .chips {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px 8px;
+  align-items: stretch;
+  gap: 2px;
+  margin: 10px var(--sidebar-inner-x) 12px;
+  padding: 3px;
+  background: var(--tg-search-bg);
+  border-radius: 14px;
   flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
+  overflow: hidden;
 }
 
 .chip {
+  flex: 1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 13px;
+  height: 34px;
+  border-radius: 11px;
+  font-size: 13.5px;
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
   transition: background var(--transition-fast), color var(--transition-fast);
 
   &:hover {
-    background: var(--hover-color);
+    color: var(--text-primary);
   }
 
   &.chipActive {
-    background: var(--surface-color-secondary);
-    color: var(--text-primary);
+    background: var(--surface-color);
+    color: var(--primary-color);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -137,7 +144,7 @@
 .chatList {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0 12px;
+  padding: 0 0 var(--sidebar-bottom-padding);
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.14) transparent;
 
@@ -154,6 +161,7 @@
 .chatRow {
   display: flex;
   align-items: center;
+  min-height: 72px;
   padding: 8px 12px;
   margin: 2px 8px;
   gap: 12px;
@@ -187,12 +195,12 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
 .chatName {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
 }
 
@@ -244,6 +252,36 @@
   text-align: center;
   color: var(--text-secondary);
   font-size: 14px;
+}
+
+// Telegram floating action button: blue circle at the sidebar's bottom
+// right, above the list (the "new message" pencil).
+.fab {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.22),
+    0 8px 20px rgba(51, 144, 236, 0.38);
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+
+  &:hover {
+    opacity: 0.92;
+    transform: scale(1.04);
+  }
+
+  &:active {
+    transform: scale(0.94);
+  }
 }
 
 .overlay {
@@ -298,5 +336,9 @@
     min-width: 0;
     border-radius: 0;
     box-shadow: none;
+  }
+
+  .fab {
+    display: none;
   }
 }

@@ -10,14 +10,14 @@
 .inner {
   display: flex;
   align-items: flex-end;
-  gap: 4px;
+  gap: 6px;
   // Same center axis and width as the floating header. The .composer
   // shell already carries the horizontal gutter, so 100% here is the
   // chat width minus that gutter — no extra subtraction.
   width: min(var(--tg-content-width), 100%);
   margin: 0 auto;
   min-height: var(--tg-composer-min-height);
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: var(--tg-floating-radius);
   background: var(--tg-surface-floating);
   box-shadow: var(--tg-floating-shadow);

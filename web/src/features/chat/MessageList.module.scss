@@ -2,6 +2,10 @@
   flex: 1;
   min-height: 0;
   position: relative;
+  // Paints above the wallpaper layers (gradient ::before / tile ::after)
+  // so messages float cleanly on top; the transparent container still
+  // lets the wallpaper show through around the bubbles.
+  z-index: 1;
 }
 
 .container {
