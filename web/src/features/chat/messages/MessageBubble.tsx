@@ -28,6 +28,10 @@ interface Props {
   selectionMode: boolean;
   selected: boolean;
   onToggleSelect: () => void;
+  /** Search term highlight for the message content, when search is open. */
+  searchQuery?: string;
+  /** This message is the active search result (persistent emphasis). */
+  searchActive?: boolean;
 }
 
 interface MenuState {
@@ -36,7 +40,7 @@ interface MenuState {
   selectedText?: string;
 }
 
-export function MessageBubble({ message, selectionMode, selected, onToggleSelect }: Props) {
+export function MessageBubble({ message, selectionMode, selected, onToggleSelect, searchQuery, searchActive }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [largeDownload, setLargeDownload] = useState<{ filename: string } | null>(null);
@@ -180,12 +184,12 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
     }
     switch (message.type) {
       case 'text':
-        return <TextMessage message={message} />;
+        return <TextMessage message={message} searchQuery={searchQuery} />;
       case 'file':
         if (isImage) {
-          return <ImageMessage message={message} onDownload={handleDownload} />;
+          return <ImageMessage message={message} onDownload={handleDownload} searchQuery={searchQuery} />;
         }
-        return <FileMessage message={message} onDownload={handleDownload} />;
+        return <FileMessage message={message} onDownload={handleDownload} searchQuery={searchQuery} />;
       default:
         return (
           <div className={styles.undecryptable}>Unable to decrypt this message</div>
@@ -197,7 +201,7 @@ export function MessageBubble({ message, selectionMode, selected, onToggleSelect
     <>
       <div
         ref={wrapperRef}
-        className={`${styles.wrapper} ${selectionMode ? styles.selectable : ''} ${selected ? styles.selected : ''}`}
+        className={`${styles.wrapper} ${selectionMode ? styles.selectable : ''} ${selected ? styles.selected : ''} ${searchActive ? styles.searchActive : ''}`}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         data-message-wrapper=""

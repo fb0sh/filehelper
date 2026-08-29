@@ -16,6 +16,22 @@
   &.selected {
     background: rgba(var(--primary-color-rgb), 0.1);
   }
+
+  // Active search result: persistent, Telegram-style emphasis (the
+  // temporary jump flash lives on the MessageList wrapper instead).
+  &.searchActive {
+    background: rgba(var(--primary-color-rgb), 0.09);
+    animation: searchActiveIn 0.25s ease-out;
+  }
+}
+
+@keyframes searchActiveIn {
+  from {
+    background: rgba(var(--primary-color-rgb), 0.22);
+  }
+  to {
+    background: rgba(var(--primary-color-rgb), 0.09);
+  }
 }
 
 .checkbox {
@@ -62,5 +78,9 @@
   .wrapper,
   .checkbox {
     transition: none;
+  }
+
+  .searchActive {
+    animation: none;
   }
 }

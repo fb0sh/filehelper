@@ -4,7 +4,3 @@ export const messageKeys = {
   infinite: ['messages', 'infinite'] as const,
   latest: ['messages', 'latest'] as const,
 };
-
-export const searchKeys = {
-  results: (query: string) => ['search', query] as const,
-};

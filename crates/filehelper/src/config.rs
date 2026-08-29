@@ -36,7 +36,7 @@ const APP_DIR_NAME: &str = "filehelper";
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "filehelper",
-    version = "0.2.0",
+    version = env!("CARGO_PKG_VERSION"),
     about = "A tiny end-to-end encrypted file transfer assistant for your local network"
 )]
 pub struct Config {

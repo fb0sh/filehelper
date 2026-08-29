@@ -6,8 +6,10 @@ import {
   startServer,
   ensureSpace,
   seedEncryptedText,
+  seedEncryptedMany,
   deriveKeys,
   sha256Hex,
+  solidPng,
 } from './helpers';
 
 const SCREENSHOT_DIR = path.join(process.cwd(), '../docs/screenshots');
@@ -19,20 +21,19 @@ function shot(page: Page, name: string) {
 
 /** Browser login: type the CODE, submit, handle the one-time create
  * dialog, wait for the composer. The create dialog appears only after
- * the Scrypt KDF + login roundtrip, so we race for it. */
+ * the Scrypt KDF + login roundtrip, so we race for it. For an existing
+ * space the composer appears directly — racing avoids a 20 s stall. */
 async function login(page: Page, base: string, code: string) {
   await page.goto(base);
   await page.fill('input[placeholder="••••••••••••••"]', code);
   await page.click('button[type="submit"]');
   const composer = page.locator('textarea[placeholder="Message"]');
   const createBtn = page.locator('button', { hasText: 'Create' });
-  // First time for a code → "No existing FileHelper data… Create it?"
-  try {
-    await createBtn.waitFor({ state: 'visible', timeout: 20000 });
-  } catch {
-    // fall through: either composer appeared or something else happened
-  }
-  if (await createBtn.isVisible().catch(() => false)) {
+  const outcome = await Promise.race([
+    createBtn.waitFor({ state: 'visible', timeout: 20000 }).then(() => 'create' as const),
+    composer.waitFor({ state: 'visible', timeout: 20000 }).then(() => 'composer' as const),
+  ]);
+  if (outcome === 'create') {
     await createBtn.click();
   }
   await expect(composer).toBeVisible({ timeout: 20000 });
@@ -58,16 +59,11 @@ async function uploadFile(page: Page, file: { name: string; mimeType: string; bu
     );
 }
 
-const PNG_1x1 = Buffer.from(
-  '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c626001000000ffff03000006000557bfabd40000000049454e44ae426082',
-  'hex'
-);
-
 function uniqueCode(label: string): string {
   return `${label}-${Date.now() % 1000000}`;
 }
 
-test.describe('FileHelper vNext E2E', () => {
+test.describe('FileHelper v1.0 E2E', () => {
   test('desktop layout: sidebar + chat fill viewport', async ({ page }) => {
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
@@ -179,7 +175,7 @@ test.describe('FileHelper vNext E2E', () => {
     const base = `http://127.0.0.1:${server.port}`;
     await login(page, base, uniqueCode('img'));
 
-    await uploadFile(page, { name: 'pixel.png', mimeType: 'image/png', buffer: PNG_1x1 });
+    await uploadFile(page, { name: 'pixel.png', mimeType: 'image/png', buffer: solidPng(320, 200, [51, 144, 236]) });
     const img = page.locator('[data-image-message] img');
     await expect(img).toBeVisible({ timeout: 15000 });
     const src = await img.getAttribute('src');
@@ -223,41 +219,227 @@ test.describe('FileHelper vNext E2E', () => {
     await server.stop();
   });
 
-  test('topbar search: client-side text + filename search with jump', async ({ page }) => {
+  test('search: auto-jump, highlight, keyboard navigation, clean close', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
     await login(page, base, uniqueCode('search'));
 
+    // Console errors are only asserted for the search flow below — the
+    // login step legitimately produces a 404 (SPACE_NOT_FOUND) when a
+    // brand-new code needs its create dialog.
+    const consoleErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+
     const stamp = Date.now();
     const markerA = `needle-${stamp}-a`;
     const markerB = `needle-${stamp}-b`;
+    const markerC = `needle-${stamp}-c`;
     await sendText(page, markerA);
     await sendText(page, markerB);
+    await sendText(page, markerC);
     await uploadFile(page, { name: `secret-report-${stamp}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from('pdf') });
+
+    // Scroll the chat far away from the matches so the auto-jump is real.
+    await page.evaluate(() => {
+      const el = document.querySelector('div[class*="container"]') as HTMLElement;
+      el.scrollTop = 0;
+      el.dispatchEvent(new Event('scroll'));
+    });
+    await page.waitForTimeout(300);
 
     await page.click('button[aria-label="Search"]');
     const input = page.locator('input[placeholder="Search messages..."]');
     await expect(input).toBeVisible();
 
-    // Text match.
+    // Type → debounce → auto-jump to the NEWEST match with no extra click.
     await input.fill('needle');
-    await expect(page.locator('text=1 of 2').first()).toBeVisible({ timeout: 5000 });
-    await shot(page, 'desktop-search.png');
+    await expect(page.locator('text=1 / 3').first()).toBeVisible({ timeout: 5000 });
+    const newestMatch = page.locator('div[data-message-id]', { hasText: markerC }).first();
+    await expect(newestMatch).toBeInViewport({ timeout: 5000 });
+    // The active result carries persistent emphasis + term highlight.
+    await expect(
+      page.locator('div[data-message-id][data-search-active="true"]', { hasText: markerC })
+    ).toBeVisible();
+    await expect(newestMatch.locator('mark', { hasText: 'needle' }).first()).toBeVisible();
+
+    // ↑ / ArrowUp → older match.
+    await page.keyboard.press('ArrowUp');
+    await expect(page.locator('text=2 / 3').first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator('div[data-message-id][data-search-active="true"]', { hasText: markerB })
+    ).toBeVisible();
+
+    // ↓ / ArrowDown → newer match.
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('text=1 / 3').first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator('div[data-message-id][data-search-active="true"]', { hasText: markerC })
+    ).toBeVisible();
+
+    // Enter → older; Shift+Enter → newer.
+    await page.keyboard.press('Enter');
+    await expect(page.locator('text=2 / 3').first()).toBeVisible({ timeout: 5000 });
+    await page.keyboard.press('Shift+Enter');
+    await expect(page.locator('text=1 / 3').first()).toBeVisible({ timeout: 5000 });
+
+    // Jump to the oldest match, then back — search stays open.
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
+    await expect(page.locator('text=3 / 3').first()).toBeVisible({ timeout: 5000 });
+    await expect(input).toBeVisible();
 
     // Filename match (decrypted filename — the server never saw it).
     await input.fill(`secret-report-${stamp}`);
-    await expect(page.locator('text=1 of 1').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=1 / 1').first()).toBeVisible({ timeout: 5000 });
+    const fileCard = page.locator('[data-file-card]', { hasText: `secret-report-${stamp}` }).first();
+    await expect(fileCard).toBeInViewport({ timeout: 5000 });
+    await expect(fileCard.locator('mark', { hasText: 'secret-report' }).first()).toBeVisible();
 
-    // Jump via ↑/↓ keeps search open.
-    await input.fill('needle');
-    await expect(page.locator('text=1 of 2').first()).toBeVisible({ timeout: 5000 });
-    await page.click('button[aria-label="Older match"]');
-    await expect(page.locator('text=2 of 2').first()).toBeVisible({ timeout: 5000 });
-    await expect(input).toBeVisible();
-
+    // Close → everything is cleaned up: no marks, no active emphasis.
     await page.click('button[aria-label="Close search"]');
     await expect(input).toBeHidden();
+    await expect(page.locator('mark')).toHaveCount(0);
+    await expect(page.locator('[data-search-active="true"]')).toHaveCount(0);
+
+    // No console errors during the whole search flow.
+    expect(consoleErrors).toEqual([]);
+    await server.stop();
+  });
+
+  test('search: deep history (>50 messages) is found and auto-jumped', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    const code = uniqueCode('deep');
+
+    // Seed 620 encrypted messages through the API; the target is far
+    // older than the initial 50-message page.
+    const info = await (await fetch(`${base}/api/v1/info`)).json();
+    const keys = await deriveKeys(code, info.instanceId);
+    const token = await ensureSpace(base, code);
+    const stamp = Date.now();
+    const target = `DEEP_HISTORY_TARGET_${stamp}`;
+    const texts: string[] = [];
+    texts.push(target);
+    for (let i = 0; i < 619; i++) {
+      texts.push(`deep-filler-${stamp}-${i}`);
+    }
+    await seedEncryptedMany(base, token, keys.messageKey, keys.spaceId, texts);
+
+    await login(page, base, code);
+    await expect(page.locator(`text=deep-filler-${stamp}-618`).first()).toBeVisible({ timeout: 20000 });
+    // The target is NOT in the initial viewport (only the newest 50 are).
+    await expect(page.locator(`text=${target}`).first()).toHaveCount(0);
+
+    await page.click('button[aria-label="Search"]');
+    const input = page.locator('input[placeholder="Search messages..."]');
+    await input.fill(target);
+    await expect(page.locator('text=1 / 1').first()).toBeVisible({ timeout: 15000 });
+    const targetBubble = page.locator('div[data-message-id]', { hasText: target }).first();
+    await expect(targetBubble).toBeInViewport({ timeout: 10000 });
+    await expect(targetBubble.locator('mark', { hasText: target }).first()).toBeVisible();
+    await expect(targetBubble.getAttribute('data-search-active')).resolves.toBe('true');
+    await server.stop();
+  });
+
+  test('search: realtime matching messages grow the counter without stealing the active result', async ({ page, context }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    const code = uniqueCode('rtsearch');
+    await login(page, base, code);
+    const pageB = await context.newPage();
+    await login(pageB, base, code);
+
+    const stamp = Date.now();
+    await sendText(page, `rt-needle-${stamp}-1`);
+    await sendText(page, `rt-needle-${stamp}-2`);
+
+    await page.click('button[aria-label="Search"]');
+    const input = page.locator('input[placeholder="Search messages..."]');
+    await input.fill(`rt-needle-${stamp}`);
+    await expect(page.locator('text=1 / 2').first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator('div[data-message-id][data-search-active="true"]', { hasText: `rt-needle-${stamp}-2` })
+    ).toBeVisible();
+
+    // Another device sends a matching message while search is open.
+    await sendText(pageB, `rt-needle-${stamp}-3`);
+
+    // Counter grows to 2 / 3; the active result stays on the OLD newest
+    // (the new message arrives above it, so its position shifts).
+    await expect(page.locator('text=2 / 3').first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator('div[data-message-id][data-search-active="true"]', { hasText: `rt-needle-${stamp}-2` })
+    ).toBeVisible();
+    // Navigation still works on the grown list.
+    await page.keyboard.press('ArrowUp');
+    await expect(page.locator('text=3 / 3').first()).toBeVisible({ timeout: 5000 });
+    await server.stop();
+  });
+
+  test('search screenshot: real app demo data (desktop-search.png)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    await login(page, base, uniqueCode('shot'));
+
+    // Real, non-lorem demo history: 3 texts + 4 files (video/image/pdf/zip).
+    await sendText(page, 'Encrypted file transfer works across devices.');
+    await sendText(page, 'FileHelper v1.0 is ready for release.');
+    await sendText(page, 'Search now highlights FileHelper results.');
+    await uploadFile(page, { name: 'release-video.mp4', mimeType: 'video/mp4', buffer: Buffer.concat([Buffer.from('fake-mp4'), Buffer.alloc(64 * 1024, 1)]) });
+    await uploadFile(page, { name: 'project-notes.pdf', mimeType: 'application/pdf', buffer: Buffer.from('pdf-demo') });
+    await uploadFile(page, { name: 'photo-demo.png', mimeType: 'image/png', buffer: solidPng(320, 200, [51, 144, 236]) });
+    await uploadFile(page, { name: 'archive.zip', mimeType: 'application/zip', buffer: Buffer.from('zip-demo') });
+
+    // Wait for the image preview to decrypt and render.
+    await expect(page.locator('[data-image-message] img').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('video')).toHaveCount(0);
+
+    await page.click('button[aria-label="Search"]');
+    const input = page.locator('input[placeholder="Search messages..."]');
+    await input.fill('FileHelper');
+
+    // Auto-jump to the newest match, centered with the term highlighted.
+    await expect(page.locator('text=1 / 2').first()).toBeVisible({ timeout: 5000 });
+    const active = page.locator('div[data-message-id][data-search-active="true"]').first();
+    await expect(active).toContainText('Search now highlights FileHelper results.');
+    await expect(active.locator('mark', { hasText: 'FileHelper' }).first()).toBeVisible();
+    await expect(active).toBeInViewport({ timeout: 5000 });
+
+    // Give the smooth scroll + entrance animation a moment to settle so
+    // the capture is deterministic.
+    await page.waitForTimeout(900);
+    await shot(page, 'desktop-search.png');
+    await server.stop();
+  });
+
+  test('desktop viewport acceptance: no horizontal overflow at 1280x720 and 1920x1080', async ({ page }) => {
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await login(page, base, uniqueCode('vp'));
+    await sendText(page, 'viewport-1280');
+    await page.waitForTimeout(400);
+    let overflow = await page.evaluate(() => ({
+      sw: document.body.scrollWidth,
+      cw: document.body.clientWidth,
+    }));
+    expect(overflow.sw).toBeLessThanOrEqual(overflow.cw);
+
+    // Same logged-in session, resized to a larger desktop viewport.
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.waitForTimeout(400);
+    overflow = await page.evaluate(() => ({
+      sw: document.body.scrollWidth,
+      cw: document.body.clientWidth,
+    }));
+    expect(overflow.sw).toBeLessThanOrEqual(overflow.cw);
     await server.stop();
   });
 
@@ -420,6 +602,34 @@ test.describe('FileHelper vNext E2E', () => {
     }
   });
 
+  test('lock: returns to Enter Code, re-login restores history; About shows 1.0.0', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    const code = uniqueCode('lock');
+    await login(page, base, code);
+    const msg = `locked-msg-${Date.now()}`;
+    await sendText(page, msg);
+
+    // About → version comes from the server info endpoint.
+    await page.click('button[aria-label="Open menu"]');
+    await page.locator('div[class*="menu"] button', { hasText: 'About' }).click();
+    await expect(page.locator('text=Version 1.0.0').first()).toBeVisible({ timeout: 5000 });
+    await page.keyboard.press('Escape');
+
+    // Lock → back to the CODE prompt.
+    await page.click('button[aria-label="Open menu"]');
+    await page.locator('div[class*="menu"] button', { hasText: 'Lock' }).click();
+    await expect(page.locator('input[placeholder="••••••••••••••"]')).toBeVisible({ timeout: 5000 });
+
+    // Same code → history restored from the server.
+    await page.fill('input[placeholder="••••••••••••••"]', code);
+    await page.click('button[type="submit"]');
+    await expect(page.locator('textarea[placeholder="Message"]')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator(`text=${msg}`).first()).toBeVisible({ timeout: 10000 });
+    await server.stop();
+  });
+
   test('mobile: sidebar → chat, selection plate inside viewport', async ({ page }) => {
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;
@@ -434,7 +644,7 @@ test.describe('FileHelper vNext E2E', () => {
     await shot(page, 'mobile-chat.png');
 
     // Mobile image preview.
-    await uploadFile(page, { name: 'mobile.png', mimeType: 'image/png', buffer: PNG_1x1 });
+    await uploadFile(page, { name: 'mobile.png', mimeType: 'image/png', buffer: solidPng(320, 200, [51, 144, 236]) });
     await expect(page.locator('[data-image-message] img').first()).toBeVisible({ timeout: 15000 });
     await shot(page, 'mobile-image-preview.png');
 

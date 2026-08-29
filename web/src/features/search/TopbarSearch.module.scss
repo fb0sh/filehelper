@@ -58,10 +58,16 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
+  white-space: nowrap;
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
 }
 
 .spinner {
   animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
 }
 .historyHint {
   display: inline-flex;

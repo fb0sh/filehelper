@@ -19,7 +19,7 @@ impl App {
     pub async fn start(config: &Config) -> Result<Self, String> {
         let data_dir = config.resolve_data_dir()?;
 
-        // Pre-vNext data (plaintext schema) is never auto-migrated:
+        // Pre-E2EE data (plaintext schema) is never auto-migrated:
         // rename the whole directory aside and start a fresh encrypted
         // store. The old files stay untouched on disk.
         let backup = maybe_backup_legacy(&data_dir).await?;
@@ -101,7 +101,7 @@ impl App {
     }
 }
 
-/// If the data dir holds a legacy (pre-vNext) database, rename the whole
+/// If the data dir holds a legacy (pre-E2EE) database, rename the whole
 /// directory to `legacy-backup-YYYYMMDD-HHMMSS` (atomic rename, never a
 /// copy) and return its path. Fresh/encrypted dirs are untouched.
 async fn maybe_backup_legacy(data_dir: &Path) -> Result<Option<PathBuf>, String> {

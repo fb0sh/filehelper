@@ -5,12 +5,15 @@ import { useEffect, useRef, useState } from 'react';
 import { MediaViewer } from '../../viewer/MediaViewer';
 import { canPreviewImage, loadImagePreview, ImageNotPreviewableError } from '../../../lib/imagePreview';
 import { imagePreviewCache } from '../../../lib/imagePreviewCache';
+import { SearchHighlightedText } from '../../search/SearchHighlightedText';
 import { Download } from 'lucide-react';
 import styles from './ImageMessage.module.scss';
 
 interface Props {
   message: DecryptedMessage;
   onDownload: () => void;
+  /** When provided (search open), matching filename terms get highlighted. */
+  searchQuery?: string;
 }
 
 type PreviewState =
@@ -23,7 +26,7 @@ type PreviewState =
 // Images preview only after decrypt + magic validation, lazily when the
 // bubble approaches the viewport (IntersectionObserver). SVG and
 // oversized images are never previewed.
-export function ImageMessage({ message, onDownload }: Props) {
+export function ImageMessage({ message, onDownload, searchQuery }: Props) {
   const att = message.attachment;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<PreviewState>({ state: 'hidden' });
@@ -77,7 +80,13 @@ export function ImageMessage({ message, onDownload }: Props) {
           <Download size={18} />
         </div>
         <div className={styles.cardInfo}>
-          <div className={styles.cardName}>{att.filename}</div>
+          <div className={styles.cardName}>
+            {searchQuery ? (
+              <SearchHighlightedText text={att.filename} query={searchQuery} />
+            ) : (
+              att.filename
+            )}
+          </div>
           <div className={styles.cardSize}>
             {att.size > 64 * 1024 * 1024
               ? 'Image too large to preview'

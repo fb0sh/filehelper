@@ -2,8 +2,10 @@ import { spawn, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { scryptRootKey, deriveDomainKeys } from '../../src/lib/crypto/core';
 import { encryptMessagePayload } from '../../src/lib/crypto/messages';
+import zlib from 'node:zlib';
 
 // Playwright runs with cwd = web/
 const BIN = path.join(process.cwd(), '../target/release/filehelper');
@@ -161,10 +163,74 @@ export async function seedEncryptedText(
   return res.body.id as string;
 }
 
-import { createHash } from 'node:crypto';
+/** Seed many encrypted text messages (bounded concurrency; order within a
+ * batch is not significant — the server sorts by (created_at, uuidv7)). */
+export async function seedEncryptedMany(
+  base: string,
+  token: string,
+  messageKey: string,
+  spaceId: string,
+  texts: string[]
+): Promise<void> {
+  const CONCURRENCY = 10;
+  for (let i = 0; i < texts.length; i += CONCURRENCY) {
+    const batch = texts.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      batch.map((t) => seedEncryptedText(base, token, messageKey, spaceId, t))
+    );
+  }
+}
+
 
 export function sha256Hex(data: Buffer): string {
   return createHash('sha256').update(data).digest('hex');
+}
+
+/** Build a real, valid PNG (solid color) for preview screenshots —
+ * a real raster that passes the client magic-header check. */
+export function solidPng(width: number, height: number, rgb: [number, number, number]): Buffer {
+  const crcTable = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    crcTable[n] = c;
+  }
+  const crc32 = (buf: Buffer): number => {
+    let c = 0xffffffff;
+    for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type: truecolor RGB
+  const raw = Buffer.alloc(height * (1 + width * 3));
+  for (let y = 0; y < height; y++) {
+    const row = y * (1 + width * 3);
+    raw[row] = 0; // filter: none
+    for (let x = 0; x < width; x++) {
+      const p = row + 1 + x * 3;
+      raw[p] = rgb[0];
+      raw[p + 1] = rgb[1];
+      raw[p + 2] = rgb[2];
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 export { BIN, randomPort };

@@ -5,4 +5,4 @@ export { messagesApi } from './messages';
 export type { EncryptedMessage, EncryptedAttachment, MessageListResponse, MessageContextResponse, RealtimeEvent } from './messages';
 export { uploadsApi } from './uploads';
 export type { UploadInitResponse } from './uploads';
-export { messageKeys, searchKeys } from './queryKeys';
+export { messageKeys } from './queryKeys';

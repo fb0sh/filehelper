@@ -14,6 +14,7 @@ import {
 } from '../lib/crypto/session';
 import { decryptedCache } from '../lib/decryptedCache';
 import { imagePreviewCache } from '../lib/imagePreviewCache';
+import { resetHistoryLoader } from '../lib/searchHistory';
 
 export type AuthPhase = 'locked' | 'unlocking' | 'creating' | 'ready';
 
@@ -115,6 +116,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     terminateCryptoWorker();
     decryptedCache.clear();
     imagePreviewCache.clear();
+    resetHistoryLoader();
     set({ phase: 'locked', needsCreate: false, pendingCreate: null, loginError: null });
   },
 }));

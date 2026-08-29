@@ -65,11 +65,42 @@ encrypted messages and files.
   messages and files; the server stores **ciphertext only**
 - Per-space isolation: different codes are invisible to each other
 - Real-time sync across browsers via WebSocket (space-scoped)
-- Client-side search over decrypted history (the server can't search for you)
+- Client-side search over decrypted history, with automatic jump to the
+  newest match, persistent active-result emphasis, and per-term highlight
+  in both message text and filenames
 - Image preview after client-side decryption + magic-header validation
+- Videos, audio and other files are download-only file cards
 - Telegram-style multi-select, selection plate, and delete confirmation
 - SQLite persistence; files stored under random UUID names
 - Single binary, no runtime dependencies
+
+## Screenshots
+
+### Desktop
+
+| Main | Search |
+| --- | --- |
+| ![Main](docs/screenshots/desktop-main.png) | ![Search](docs/screenshots/desktop-search.png) |
+
+Search runs entirely client-side over decrypted history and jumps directly
+to the highlighted match — no extra click needed.
+
+| Image preview | Video (file card only) |
+| --- | --- |
+| ![Image preview](docs/screenshots/desktop-image-preview.png) | ![Video](docs/screenshots/desktop-video-file.png) |
+
+| Multi-select | Delete confirmation |
+| --- | --- |
+| ![Selection mode](docs/screenshots/desktop-selection-mode.png) | ![Selection confirm](docs/screenshots/desktop-selection-confirm.png) |
+
+### Mobile
+
+| Chat | Selection |
+| --- | --- |
+| ![Mobile chat](docs/screenshots/mobile-chat.png) | ![Mobile selection](docs/screenshots/mobile-selection.png) |
+
+All screenshots are captures of the real application running over
+end-to-end encrypted demo data.
 
 ## Modes
 
@@ -93,6 +124,28 @@ filehelper [OPTIONS]
 --version, --help
 ```
 
+## Search
+
+Search is fully client-side: the server can't search for you because it
+never sees plaintext. In the current browser tab, FileHelper decrypts the
+message metadata it has loaded, progressively backfills older encrypted
+history in pages of 500, and matches the query against message text and
+decrypted filenames.
+
+As soon as results exist, the chat **auto-jumps to the newest match** —
+you never see `1 / N` while still parked somewhere unrelated. The active
+result keeps a persistent Telegram-style emphasis while search is open,
+every occurrence of the query is highlighted in the message text and in
+filenames, and `↑` / `Enter` (older) and `↓` / `Shift+Enter` (newer)
+navigate without closing the search. Background loading keeps growing the
+result count live; closing the search (Back / ✕ / Escape) removes all
+highlights and pauses the backfill, resuming from where it stopped next
+time.
+
+No attachment ciphertext is ever downloaded for search — only encrypted
+message envelopes. The decrypted in-memory cache lives in the current tab
+and is never persisted to localStorage or IndexedDB.
+
 ## Data Storage
 
 ```
@@ -110,8 +163,8 @@ nothing readable.
 
 ### Legacy data
 
-The vNext E2EE redesign creates a new encrypted store. If a previous
-(pre-0.2) plaintext data directory is found at startup, it is **not** read or
+FileHelper 1.0 uses an encrypted storage format. If a previous pre-E2EE
+(plaintext) data directory is found at startup, it is **not** read or
 migrated — the whole directory is renamed aside untouched to
 `legacy-backup-YYYYMMDD-HHMMSS/` and a fresh encrypted store is created:
 
@@ -174,7 +227,9 @@ HTTPS (or Tailscale) in a compatible Chromium browser for large downloads.
 
 ## Build from Source
 
-Requirements: Rust 1.80+, Node.js 20+, pnpm.
+Requirements: Rust 1.85+ (edition 2024), Node.js 22+ and pnpm (the CI
+workflow runs Node 22; the repo's `mise` toolchain uses Rust 1.96 / Node
+24 / pnpm 11).
 
 ```bash
 pnpm --dir web install --frozen-lockfile
@@ -195,7 +250,7 @@ mise run build  # frontend build + release binary
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/info` | Server info (instanceId, cryptoVersion, maxUploadSize) |
+| GET | `/api/v1/info` | Server info (name, version, instanceId, cryptoVersion, maxUploadSize) |
 | POST | `/api/v1/auth/login` | Verify `{spaceId, authKey}` → Bearer session token |
 | POST | `/api/v1/auth/create` | Create a new space (rate limited) |
 | GET | `/api/v1/messages` | List encrypted messages (cursor pagination) |

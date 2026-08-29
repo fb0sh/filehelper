@@ -1,106 +1,123 @@
-import { useEffect, useRef, useState } from 'react';
-import { messagesApi } from '../../api';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useSearchStore } from '../../stores/search';
-import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { useEffectiveSearchQuery } from '../../hooks/useEffectiveSearchQuery';
+import { useDecryptedCacheVersion } from '../../hooks/useDecryptedCacheVersion';
 import { decryptedCache } from '../../lib/decryptedCache';
-import { decryptEncryptedMessage } from '../../lib/crypto/messages';
-import { loadCryptoSession } from '../../lib/crypto/session';
 import { searchMessages } from '../../lib/clientSearch';
+import {
+  startHistorySearch,
+  subscribeHistoryLoader,
+  getHistoryLoaderVersion,
+  isHistoryLoading,
+} from '../../lib/searchHistory';
 import type { DecryptedMessage } from '../../lib/crypto/messages';
 import { ArrowLeft, Search as SearchIcon, X, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import styles from './TopbarSearch.module.scss';
 
-const HISTORY_PAGE = 500;
-
-// Telegram Web K topbar search, now fully client-side: the server stores
-// only ciphertext, so matching happens over decrypted in-memory messages.
-// History is backfilled in large pages in the background; ↑ walks toward
-// older matches, ↓ toward newer. The search never closes after a jump.
+// Telegram Web K topbar search, fully client-side: the server stores only
+// ciphertext, so matching happens over decrypted in-memory messages.
+//
+// Behavior contract:
+//  - As soon as the debounced query has results, the NEWEST match becomes
+//    the active result and the chat auto-jumps to it — the user never
+//    sees "1 / N" while still parked somewhere unrelated.
+//  - ↑ / Enter walk toward older matches, ↓ / Shift+Enter toward newer.
+//  - Background history backfill keeps adding results live (counter +
+//    spinner) without stealing the active result.
 export function TopbarSearch() {
   const query = useSearchStore((s) => s.query);
   const setQuery = useSearchStore((s) => s.setQuery);
-  const setOpen = useSearchStore((s) => s.setOpen);
+  const activeResultId = useSearchStore((s) => s.activeResultId);
+  const setActiveResultId = useSearchStore((s) => s.setActiveResultId);
   const requestJump = useSearchStore((s) => s.requestJump);
+  const closeSearch = useSearchStore((s) => s.closeSearch);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [index, setIndex] = useState(0);
-  const [searchingHistory, setSearchingHistory] = useState(false);
 
-  const debouncedQuery = useDebouncedValue(query.trim(), 300);
+  const debouncedQuery = useEffectiveSearchQuery();
+  const cacheVersion = useDecryptedCacheVersion();
+  // Re-render whenever the loader toggles (page fetched / finished).
+  useSyncExternalStore(subscribeHistoryLoader, getHistoryLoaderVersion);
+  const historyLoading = isHistoryLoading();
 
-  // Background history backfill: fetch encrypted pages of 500, decrypt
-  // into the shared cache. No attachment ciphertext is downloaded.
+  // Start (or resume) the history backfill when the search opens. The
+  // loader is query-agnostic: typing a new query never restarts it.
   useEffect(() => {
-    if (!debouncedQuery) return;
-    let cancelled = false;
-    const session = loadCryptoSession();
-    if (!session) return;
+    startHistorySearch();
+  }, []);
 
-    (async () => {
-      setSearchingHistory(true);
-      let cursor: string | undefined;
-      for (let page = 0; page < 200; page++) {
-        if (cancelled) return;
-        try {
-          const res = await messagesApi.list(cursor, HISTORY_PAGE);
-          let added = 0;
-          for (const record of res.messages) {
-            if (decryptedCache.has(record.id)) continue;
-            const outcome = decryptEncryptedMessage(
-              session.messageKey,
-              session.spaceId,
-              record
-            );
-            if (outcome.ok) {
-              decryptedCache.set(outcome.message);
-              added += 1;
-            }
-          }
-          if (!res.nextCursor || added === 0) break;
-          cursor = res.nextCursor;
-        } catch {
-          break; // stop backfilling on any error; search what we have
-        }
-      }
-      if (!cancelled) setSearchingHistory(false);
-    })();
+  // Reactive results: recomputed only when the query or the cache changes.
+  const results: DecryptedMessage[] = useMemo(() => {
+    void cacheVersion; // reactive dependency: recompute when the cache mutates
+    return searchMessages(decryptedCache.all(), debouncedQuery);
+  }, [debouncedQuery, cacheVersion]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQuery]);
+  const activeIndex =
+    activeResultId !== null ? results.findIndex((r) => r.id === activeResultId) : -1;
+  // The auto-jump effect adopts results[0] within a frame; until then the
+  // counter simply shows position 1 instead of a confusing 0 / N.
+  const shownIndex = activeIndex >= 0 ? activeIndex : results.length > 0 ? 0 : -1;
 
-  // Re-run matching over whatever is currently decrypted.
-  const results: DecryptedMessage[] = searchMessages(decryptedCache.all(), debouncedQuery);
-
+  // Auto-jump: whenever the active result is missing (first search, query
+  // change, active message deleted) and results exist, adopt the newest
+  // match and jump to it. A valid active result is never disturbed by
+  // results growing in the background or realtime inserts.
   useEffect(() => {
-    setIndex(0);
-  }, [debouncedQuery]);
-
-  useEffect(() => {
-    if (results.length > 0 && index >= results.length) {
-      setIndex(results.length - 1);
+    if (!debouncedQuery || results.length === 0) {
+      if (activeResultId !== null) setActiveResultId(null);
+      return;
     }
-  }, [results.length, index]);
+    const stillValid = activeResultId !== null && results.some((r) => r.id === activeResultId);
+    if (!stillValid) {
+      const first = results[0];
+      setActiveResultId(first.id);
+      requestJump(first);
+    }
+  }, [debouncedQuery, results, activeResultId, requestJump, setActiveResultId]);
 
   const goOlder = () => {
-    if (index + 1 >= results.length) return;
-    const next = index + 1;
-    setIndex(next);
-    requestJump(results[next]);
+    if (activeIndex < 0 || activeIndex + 1 >= results.length) return;
+    const next = results[activeIndex + 1];
+    setActiveResultId(next.id);
+    requestJump(next);
   };
 
   const goNewer = () => {
-    if (index - 1 < 0) return;
-    const next = index - 1;
-    setIndex(next);
-    requestJump(results[next]);
+    if (activeIndex <= 0) return;
+    const next = results[activeIndex - 1];
+    setActiveResultId(next.id);
+    requestJump(next);
   };
 
-  const close = () => setOpen(false);
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSearch();
+      return;
+    }
+    // IME composition (Chinese/Japanese/etc.): Enter commits the candidate
+    // — it must never be treated as search navigation.
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) goNewer();
+      else goOlder();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      goOlder();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      goNewer();
+    }
+  };
 
-  return (
+  const olderDisabled = activeIndex < 0 || activeIndex + 1 >= results.length;
+  const newerDisabled = activeIndex <= 0;  return (
     <div className={styles.search}>
-      <button className={styles.iconBtn} onClick={close} aria-label="Back">
+      <button className={styles.iconBtn} onClick={closeSearch} aria-label="Back">
         <ArrowLeft size={20} />
       </button>
       <SearchIcon size={16} className={styles.searchIcon} />
@@ -108,32 +125,34 @@ export function TopbarSearch() {
         ref={inputRef}
         className={styles.input}
         placeholder="Search messages..."
+        aria-label="Search messages"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') close();
-          if (e.key === 'ArrowUp') { e.preventDefault(); goOlder(); }
-          if (e.key === 'ArrowDown') { e.preventDefault(); goNewer(); }
-        }}
+        onKeyDown={onKeyDown}
         autoFocus
       />
       {debouncedQuery && (
-        <div className={styles.counter}>
-          {searchingHistory ? (
+        <div className={styles.counter} aria-live="polite">
+          {results.length > 0 ? (
+            <>
+              <span className={styles.count}>
+                {shownIndex + 1} / {results.length}
+              </span>
+              {historyLoading && <Loader2 size={12} className={styles.spinner} />}
+            </>
+          ) : historyLoading ? (
             <span className={styles.historyHint}>
-              <Loader2 size={13} className={styles.spinner} /> Searching history…
+              <Loader2 size={12} className={styles.spinner} /> Searching…
             </span>
-          ) : results.length > 0 ? (
-            `${index + 1} of ${results.length}`
           ) : (
-            'No results'
+            <span>No results</span>
           )}
         </div>
       )}
       <button
         className={styles.iconBtn}
         onClick={goNewer}
-        disabled={index <= 0 || results.length === 0}
+        disabled={newerDisabled}
         aria-label="Newer match"
       >
         <ChevronDown size={18} />
@@ -141,12 +160,12 @@ export function TopbarSearch() {
       <button
         className={styles.iconBtn}
         onClick={goOlder}
-        disabled={index + 1 >= results.length || results.length === 0}
+        disabled={olderDisabled}
         aria-label="Older match"
       >
         <ChevronUp size={18} />
       </button>
-      <button className={styles.iconBtn} onClick={close} aria-label="Close search">
+      <button className={styles.iconBtn} onClick={closeSearch} aria-label="Close search">
         <X size={18} />
       </button>
     </div>

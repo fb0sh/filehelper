@@ -2,6 +2,8 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { messagesApi, messageKeys, EncryptedMessage } from '../../api';
 import { useUploadStore } from '../../stores/upload';
 import { useSelectionStore } from '../../stores/selection';
+import { useSearchStore } from '../../stores/search';
+import { useEffectiveSearchQuery } from '../../hooks/useEffectiveSearchQuery';
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { MessageBubble } from './messages/MessageBubble';
 import { UploadMessage } from './messages/UploadMessage';
@@ -12,6 +14,7 @@ import { isNearBottom, shouldLoadMore } from '../../lib/scroll';
 import { computeAddedNewest, decideNewMessage } from '../../lib/newMessages';
 import { contextToInfiniteData } from '../../lib/realtimeCache';
 import { useDecryptedMessages } from '../../hooks/useDecryptedMessages';
+import clsx from 'clsx';
 import type { DecryptedMessage } from '../../lib/crypto/messages';
 import styles from './MessageList.module.scss';
 
@@ -37,6 +40,11 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   const selectionActive = useSelectionStore((s) => s.active);
   const selectedIds = useSelectionStore((s) => s.selectedIds);
   const toggleSelected = useSelectionStore((s) => s.toggle);
+  const searchOpen = useSearchStore((s) => s.open);
+  const activeResultId = useSearchStore((s) => s.activeResultId);
+  // Debounced query shared with the search results computation, so the
+  // highlight and the matching semantics can never disagree.
+  const searchQuery = useEffectiveSearchQuery();
   const queryClient = useQueryClient();
 
   const activeTasks = uploadTasks.filter(
@@ -128,13 +136,17 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
             messageKeys.infinite,
             contextToInfiniteData(ctx.messages, ctx.nextCursor)
           );
-          await new Promise((r) => setTimeout(r, 80));
         } catch {
           return;
         }
       }
-      const el = containerRef.current?.querySelector(`[data-message-id="${msg.id}"]`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Wait for the wrapper to actually be in the DOM (context fetch →
+      // query cache → decrypt → render). Poll with requestAnimationFrame
+      // instead of a magic setTimeout so the jump is never flaky; the
+      // retry is bounded so a missing element just gives up silently.
+      const el = await waitForMessageEl(containerRef, msg.id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightId(msg.id);
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
       highlightTimer.current = setTimeout(() => setHighlightId(null), 2000);
@@ -159,21 +171,24 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
               <DateSeparator date={group.date} />
               {group.messages.map((msg) => {
                 const selected = selectedIds.has(msg.id);
+                const isSearchActive = searchOpen && activeResultId === msg.id;
                 return (
                   <div
                     key={msg.id}
                     data-message-id={msg.id}
-                    className={
-                      highlightId === msg.id
-                        ? styles.highlighted
-                        : undefined
-                    }
+                    data-search-active={isSearchActive ? 'true' : undefined}
+                    className={clsx(
+                      highlightId === msg.id && styles.highlighted,
+                      isSearchActive && styles.searchActive
+                    )}
                   >
                     <MessageBubble
                       message={msg}
                       selectionMode={selectionActive}
                       selected={selected}
                       onToggleSelect={() => toggleSelected(msg.id)}
+                      searchQuery={searchOpen ? searchQuery : undefined}
+                      searchActive={isSearchActive}
                     />
                   </div>
                 );
@@ -219,6 +234,27 @@ function groupByDate(messages: DecryptedMessage[]): { date: string; messages: De
     }
   }
   return groups;
+}
+
+const JUMP_WAIT_FRAMES = 60; // ≈ 1 s of requestAnimationFrame retries
+
+/** Wait for the message wrapper to exist in the DOM, polling with
+ * requestAnimationFrame (bounded). Resolves null if it never appears. */
+function waitForMessageEl(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  id: string
+): Promise<Element | null> {
+  return new Promise((resolve) => {
+    let frames = 0;
+    const check = () => {
+      const el = containerRef.current?.querySelector(`[data-message-id="${id}"]`);
+      if (el) return resolve(el);
+      if (frames >= JUMP_WAIT_FRAMES) return resolve(null);
+      frames += 1;
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
 }
 
 export type { EncryptedMessage };

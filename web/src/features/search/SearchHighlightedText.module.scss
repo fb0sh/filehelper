@@ -1,0 +1,9 @@
+// Telegram-style search term highlight. Works in both themes via the
+// shared primary color; keeps the message's own text color.
+.match {
+  background: rgba(var(--primary-color-rgb), 0.28);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+  margin: 0 -1px;
+}

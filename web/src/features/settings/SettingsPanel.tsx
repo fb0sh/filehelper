@@ -5,6 +5,7 @@ import { useUIStore } from '../../stores/ui';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { decryptedCache } from '../../lib/decryptedCache';
 import { imagePreviewCache } from '../../lib/imagePreviewCache';
+import { resetHistoryLoader } from '../../lib/searchHistory';
 import { X, Monitor, Sun, Moon } from 'lucide-react';
 import { formatBytes } from '../../lib/bytes';
 import styles from './SettingsPanel.module.scss';
@@ -46,6 +47,7 @@ export function SettingsPanel() {
       await messagesApi.clearAll();
       decryptedCache.clear();
       imagePreviewCache.clear();
+      resetHistoryLoader();
       queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
       queryClient.invalidateQueries({ queryKey: messageKeys.latest });
       setCleared(true);
@@ -126,7 +128,7 @@ export function SettingsPanel() {
                 </svg>
               </div>
               <div className={styles.aboutName}>{info?.name ?? 'FileHelper'}</div>
-              <div className={styles.aboutVersion}>Version {info?.version ?? '0.2.0'}</div>
+              <div className={styles.aboutVersion}>Version {info?.version ?? '1.0.0'}</div>
               <p className={styles.aboutText}>
                 A tiny end-to-end encrypted file transfer assistant for
                 your local network.

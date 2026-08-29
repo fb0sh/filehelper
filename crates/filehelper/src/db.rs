@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 pub const SCHEMA_VERSION: &str = "3";
 pub const CRYPTO_VERSION: u32 = 1;
 
-/// Detect a pre-vNext (legacy) FileHelper database: it has a `messages`
+/// Detect a pre-E2EE (legacy) FileHelper database: it has a `messages`
 /// table with the old plaintext schema and no `spaces` table. New
 /// databases are created with the encrypted schema.
 pub async fn detect_legacy(pool: &SqlitePool) -> Result<bool, sqlx::Error> {

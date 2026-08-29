@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSelectionStore } from '../stores/selection';
 import { useSearchStore } from '../stores/search';
 import { useUploadStore } from '../stores/upload';
+import { resetHistoryLoader } from '../lib/searchHistory';
 
 describe('selection store', () => {
   beforeEach(() => {
@@ -38,12 +39,51 @@ describe('selection store', () => {
 });
 
 describe('search store', () => {
+  beforeEach(() => {
+    resetHistoryLoader();
+    useSearchStore.setState({ open: false, query: '', activeResultId: null, jumpRequest: null });
+  });
+
   it('jump requests carry the decrypted message', () => {
     const msg = { id: 'm1' } as never;
     useSearchStore.getState().requestJump(msg);
     expect(useSearchStore.getState().jumpRequest?.message).toBe(msg);
     useSearchStore.getState().clearJump();
     expect(useSearchStore.getState().jumpRequest).toBeNull();
+  });
+
+  it('opening search exits selection mode (modes never stack)', () => {
+    useSelectionStore.getState().enter('a');
+    expect(useSelectionStore.getState().active).toBe(true);
+    useSearchStore.getState().setOpen(true);
+    expect(useSelectionStore.getState().active).toBe(false);
+    expect(useSearchStore.getState().open).toBe(true);
+  });
+
+  it('closing search wipes the query, active result and pending jump', () => {
+    useSearchStore.getState().setOpen(true);
+    useSearchStore.getState().setQuery('needle');
+    useSearchStore.getState().setActiveResultId('m1');
+    useSearchStore.getState().requestJump({ id: 'm1' } as never);
+
+    useSearchStore.getState().setOpen(false);
+    const s = useSearchStore.getState();
+    expect(s.open).toBe(false);
+    expect(s.query).toBe('');
+    expect(s.activeResultId).toBeNull();
+    expect(s.jumpRequest).toBeNull();
+  });
+
+  it('closeSearch is the full cleanup path', () => {
+    useSearchStore.getState().setOpen(true);
+    useSearchStore.getState().setQuery('x');
+    useSearchStore.getState().setActiveResultId('m1');
+    useSearchStore.getState().closeSearch();
+    const s = useSearchStore.getState();
+    expect(s.open).toBe(false);
+    expect(s.query).toBe('');
+    expect(s.activeResultId).toBeNull();
+    expect(s.jumpRequest).toBeNull();
   });
 });
 
