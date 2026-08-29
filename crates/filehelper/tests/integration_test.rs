@@ -242,3 +242,193 @@ async fn test_password_derive_keys() {
     // Different keys for different purposes
     assert_ne!(auth_key, session_key);
 }
+
+#[tokio::test]
+async fn test_fts_searches_attachment_filename() {
+    let (state, tmp) = setup_test_app().await;
+
+    db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "document".to_string(),
+            text: None,
+            attachment: Some(db::NewAttachment {
+                original_name: "quarterly-report-2026.pdf".to_string(),
+                mime_type: Some("application/pdf".to_string()),
+                size_bytes: 10,
+                sha256: "h".to_string(),
+                storage_name: "s-report".to_string(),
+            }),
+        },
+    )
+    .await
+    .unwrap();
+
+    db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "text".to_string(),
+            text: Some("unrelated text message".to_string()),
+            attachment: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let results = db::search::search_messages(&state.db, "quarterly", 10)
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(
+        results[0].attachment.as_ref().unwrap().filename,
+        "quarterly-report-2026.pdf"
+    );
+
+    cleanup(&tmp);
+}
+
+#[tokio::test]
+async fn test_fts_special_characters_do_not_error() {
+    let (state, tmp) = setup_test_app().await;
+
+    db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "text".to_string(),
+            text: Some("hello world".to_string()),
+            attachment: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // None of these user inputs may produce an error (500).
+    for query in [
+        "\"",
+        "(",
+        ")",
+        "*",
+        "-",
+        "OR",
+        "a OR b",
+        "NEAR(a b)",
+        "\"unclosed",
+        "*",
+        "()",
+        "a-b",
+        "NOT",
+        "AND",
+        "^foo",
+        "日本語",
+        "文件 传输",
+    ] {
+        let result = db::search::search_messages(&state.db, query, 10).await;
+        assert!(result.is_ok(), "search failed for input: {query}");
+    }
+
+    cleanup(&tmp);
+}
+
+#[tokio::test]
+async fn test_fts_finds_text_after_special_char_sanitizing() {
+    let (state, tmp) = setup_test_app().await;
+
+    db::insert_message(
+        &state.db,
+        &db::NewMessage {
+            kind: "text".to_string(),
+            text: Some("meeting notes from monday".to_string()),
+            attachment: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let results = db::search::search_messages(&state.db, "\"meeting notes\"", 10)
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+
+    cleanup(&tmp);
+}
+
+#[tokio::test]
+async fn test_message_context_preserves_order() {
+    let (state, tmp) = setup_test_app().await;
+
+    let mut ids = Vec::new();
+    for i in 0..5 {
+        let m = db::insert_message(
+            &state.db,
+            &db::NewMessage {
+                kind: "text".to_string(),
+                text: Some(format!("message-{i}")),
+                attachment: None,
+            },
+        )
+        .await
+        .unwrap();
+        ids.push(m.id);
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    }
+
+    // Jump to the middle message.
+    let ctx = db::get_message_context(&state.db, &ids[2], 10)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let texts: Vec<&str> = ctx
+        .messages
+        .iter()
+        .map(|m| m.text.as_deref().unwrap())
+        .collect();
+    assert_eq!(
+        texts,
+        vec![
+            "message-0",
+            "message-1",
+            "message-2",
+            "message-3",
+            "message-4"
+        ]
+    );
+
+    // All 5 messages fit in the window → no older messages exist.
+    assert!(ctx.next_cursor.is_none());
+
+    cleanup(&tmp);
+}
+
+#[tokio::test]
+async fn test_message_context_reports_older_cursor() {
+    let (state, tmp) = setup_test_app().await;
+
+    let mut ids = Vec::new();
+    for i in 0..6 {
+        let m = db::insert_message(
+            &state.db,
+            &db::NewMessage {
+                kind: "text".to_string(),
+                text: Some(format!("m{i}")),
+                attachment: None,
+            },
+        )
+        .await
+        .unwrap();
+        ids.push(m.id);
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    }
+
+    // Window of 2 centered on the last message: m4 + m5 (tuple order).
+    let ctx = db::get_message_context(&state.db, &ids[5], 2)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(ctx.messages.len(), 2);
+    assert_eq!(ctx.messages[0].text.as_deref(), Some("m4"));
+    assert_eq!(ctx.messages[1].text.as_deref(), Some("m5"));
+    assert_eq!(ctx.next_cursor.as_deref(), Some(ids[4].as_str()));
+
+    cleanup(&tmp);
+}

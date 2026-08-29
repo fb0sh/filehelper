@@ -1,3 +1,4 @@
+// Desktop: fixed-width right column of the flex layout.
 .panel {
   width: 320px;
   height: 100dvh;
@@ -8,6 +9,17 @@
   flex-shrink: 0;
 }
 
+// Mobile: full-screen overlay that replaces the chat view.
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--surface-color);
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.15s ease-out;
+}
+
 .header {
   height: var(--header-height);
   display: flex;
@@ -15,6 +27,7 @@
   padding: 0 12px;
   gap: 8px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .searchIcon {
@@ -29,6 +42,7 @@
   background: none;
   font-size: 15px;
   color: var(--text-primary);
+  min-width: 0;
 
   &::placeholder {
     color: var(--text-tertiary);
@@ -57,10 +71,16 @@
 }
 
 .resultItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
   transition: background var(--transition-fast);
+  text-align: left;
 
   &:hover {
     background: var(--hover-color);
@@ -68,17 +88,19 @@
 }
 
 .resultText {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 4px;
 }
 
 .resultTime {
   font-size: 12px;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .empty {

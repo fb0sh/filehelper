@@ -23,6 +23,18 @@ export interface MessageListResponse {
   nextCursor: string | null;
 }
 
+export interface MessageContextResponse {
+  /** Messages ordered old → new, target message included. */
+  messages: Message[];
+  nextCursor: string | null;
+}
+
+export interface RealtimeEvent {
+  type: 'message.created' | 'message.deleted';
+  message?: Message;
+  messageId?: string;
+}
+
 export const messagesApi = {
   list: (before?: string, limit = 50) => {
     const params = new URLSearchParams();
@@ -36,5 +48,8 @@ export const messagesApi = {
     headers: { 'Content-Type': 'application/json' },
   }),
   delete: (id: string) => request<void>(`/messages/${id}`, { method: 'DELETE' }),
-  get: (id: string) => request<Message>(`/messages/${id}`),
+  context: (id: string, limit = 50) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return request<MessageContextResponse>(`/messages/${id}/context?${params}`);
+  },
 };

@@ -6,6 +6,9 @@ pub use messages::*;
 
 use sqlx::SqlitePool;
 
+// Bump to rebuild the FTS index after a schema change.
+const FTS_SCHEMA_VERSION: &str = "2";
+
 pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query("PRAGMA journal_mode=WAL;")
         .execute(pool)
@@ -78,47 +81,69 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    ensure_fts_schema(pool).await?;
+
+    Ok(())
+}
+
+// Standalone FTS5 index over (message text, attachment filename).
+// Kept in sync explicitly by insert_message/delete_message — no triggers,
+// because filename lives in another table and trigger-based external
+// content tables can't see it.
+async fn ensure_fts_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let version =
+        sqlx::query_scalar::<_, String>("SELECT value FROM meta WHERE key = 'fts_schema_version'")
+            .fetch_optional(pool)
+            .await?;
+
+    if version.as_deref() == Some(FTS_SCHEMA_VERSION) {
+        return Ok(());
+    }
+
+    // Drop legacy trigger-based schema if present.
+    sqlx::query("DROP TRIGGER IF EXISTS messages_ai")
+        .execute(pool)
+        .await?;
+    sqlx::query("DROP TRIGGER IF EXISTS messages_ad")
+        .execute(pool)
+        .await?;
+    sqlx::query("DROP TRIGGER IF EXISTS messages_au")
+        .execute(pool)
+        .await?;
+    sqlx::query("DROP TABLE IF EXISTS messages_fts")
+        .execute(pool)
+        .await?;
+
     sqlx::query(
         r#"
-        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-            text, filename, content='messages', content_rowid='rowid'
+        CREATE VIRTUAL TABLE messages_fts USING fts5(
+            text, filename, message_id UNINDEXED
         );
         "#,
     )
     .execute(pool)
     .await?;
 
-    // Create triggers for FTS sync
+    // Backfill from existing data.
     sqlx::query(
         r#"
-        CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-            INSERT INTO messages_fts(rowid, text) VALUES (new.rowid, new.text);
-        END;
+        INSERT INTO messages_fts(message_id, text, filename)
+        SELECT m.id, COALESCE(m.text, ''), COALESCE(a.original_name, '')
+        FROM messages m
+        LEFT JOIN attachments a ON a.message_id = m.id
         "#,
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r#"
-        CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-            INSERT INTO messages_fts(messages_fts, rowid, text) VALUES('delete', old.rowid, old.text);
-        END;
-        "#,
+        "INSERT INTO meta (key, value) VALUES ('fts_schema_version', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
+    .bind(FTS_SCHEMA_VERSION)
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        r#"
-        CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-            INSERT INTO messages_fts(messages_fts, rowid, text) VALUES('delete', old.rowid, old.text);
-            INSERT INTO messages_fts(rowid, text) VALUES (new.rowid, new.text);
-        END;
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
+    tracing::info!("FTS index rebuilt (schema version {FTS_SCHEMA_VERSION})");
     Ok(())
 }

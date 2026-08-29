@@ -1,17 +1,28 @@
+import { useEffect } from 'react';
 import { ChatHeader } from './ChatHeader';
-import { MessageList } from './MessageList';
+import { MessageList, MessageListHandle } from './MessageList';
 import { Composer } from '../composer/Composer';
-import { Message } from '../../api';
+import { useSearchStore } from '../../stores/search';
 import { useRef } from 'react';
 import styles from './Chat.module.scss';
 
 export function Chat() {
-  const messageListRef = useRef<{ jumpToMessage: (msg: Message) => void }>(null);
+  const listRef = useRef<MessageListHandle>(null);
+  const jumpRequest = useSearchStore((s) => s.jumpRequest);
+  const clearJump = useSearchStore((s) => s.clearJump);
+
+  // Search result clicked → jump to the message in the list.
+  useEffect(() => {
+    if (jumpRequest) {
+      listRef.current?.jumpToMessage(jumpRequest.message);
+      clearJump();
+    }
+  }, [jumpRequest, clearJump]);
 
   return (
     <div className={styles.chat}>
-      <ChatHeader onJumpToMessage={(msg) => messageListRef.current?.jumpToMessage(msg)} />
-      <MessageList ref={messageListRef} />
+      <ChatHeader />
+      <MessageList ref={listRef} />
       <Composer />
     </div>
   );

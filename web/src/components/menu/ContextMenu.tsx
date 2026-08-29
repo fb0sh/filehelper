@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import styles from './ContextMenu.module.scss';
 
 interface MenuItem {
@@ -47,7 +48,9 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     }
   }, [x, y]);
 
-  return (
+  // Portal to <body>: the message list creates its own stacking context,
+  // which would otherwise bury the fixed menu under the composer.
+  return createPortal(
     <div
       ref={menuRef}
       className={styles.menu}
@@ -66,6 +69,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           {item.label}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }

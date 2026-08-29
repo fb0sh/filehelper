@@ -1,39 +1,51 @@
-type MessageHandler = (event: any) => void;
+export type WsStatus = 'connecting' | 'connected' | 'disconnected';
 
-export function createWebSocket(onMessage: MessageHandler): () => void {
+export interface WebSocketHandlers {
+  onEvent?: (event: unknown) => void;
+  onStatus?: (status: WsStatus) => void;
+}
+
+// WebSocket with exponential backoff reconnect (1s → 15s, + jitter).
+// Status lifecycle: connecting → connected → (close) disconnected →
+// (retry) connecting → …
+export function createWebSocket({ onEvent, onStatus }: WebSocketHandlers): () => void {
   let ws: WebSocket | null = null;
   let retryDelay = 1000;
-  let maxRetryDelay = 15000;
+  const maxRetryDelay = 15000;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let destroyed = false;
 
+  const scheduleReconnect = () => {
+    onStatus?.('disconnected');
+    timer = setTimeout(() => {
+      retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
+      connect();
+    }, retryDelay + Math.random() * 1000);
+  };
+
   function connect() {
     if (destroyed) return;
+    onStatus?.('connecting');
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${window.location.host}/api/v1/ws`;
-    
-    ws = new WebSocket(url);
-    
+    ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/ws`);
+
     ws.onopen = () => {
       retryDelay = 1000;
+      onStatus?.('connected');
     };
-    
+
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        onMessage(data);
-      } catch {}
-    };
-    
-    ws.onclose = () => {
-      if (!destroyed) {
-        timer = setTimeout(() => {
-          connect();
-          retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
-        }, retryDelay + Math.random() * 1000);
+        onEvent?.(JSON.parse(event.data));
+      } catch {
+        // ignore malformed frames
       }
     };
-    
+
+    ws.onclose = () => {
+      if (!destroyed) scheduleReconnect();
+    };
+
     ws.onerror = () => {
       ws?.close();
     };

@@ -40,6 +40,9 @@ pub async fn list_messages(
     limit: i64,
 ) -> Result<MessageListResponse, AppError> {
     let limit = limit.clamp(1, 100);
+    // Cursor compares (created_at_ms, id) tuples: UUIDv7 is monotonic
+    // within the same millisecond, so equal-timestamp messages are
+    // never skipped by pagination.
     let messages = if let Some(ref cursor) = before {
         sqlx::query_as::<_, MessageRow>(
             r#"
@@ -50,7 +53,9 @@ pub async fn list_messages(
             FROM messages m
             LEFT JOIN attachments a ON a.message_id = m.id
             WHERE m.created_at_ms < (SELECT created_at_ms FROM messages WHERE id = ?1)
-            ORDER BY m.created_at_ms DESC
+               OR (m.created_at_ms = (SELECT created_at_ms FROM messages WHERE id = ?1)
+                   AND m.id < ?1)
+            ORDER BY m.created_at_ms DESC, m.id DESC
             LIMIT ?2
             "#,
         )
@@ -67,7 +72,7 @@ pub async fn list_messages(
                    a.created_at_ms as a_created_at_ms
             FROM messages m
             LEFT JOIN attachments a ON a.message_id = m.id
-            ORDER BY m.created_at_ms DESC
+            ORDER BY m.created_at_ms DESC, m.id DESC
             LIMIT ?1
             "#,
         )
@@ -91,7 +96,7 @@ pub async fn list_messages(
 
     let grouped = group_messages(messages);
     let mut result: Vec<Message> = grouped.into_values().collect();
-    result.sort_by_key(|m| std::cmp::Reverse(m.created_at.clone()));
+    result.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
 
     Ok(MessageListResponse {
         messages: result,
@@ -108,17 +113,18 @@ pub async fn insert_message(pool: &SqlitePool, message: &NewMessage) -> Result<M
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
         .to_string();
 
+    let mut tx = pool.begin().await?;
+
     sqlx::query("INSERT INTO messages (id, kind, text, created_at_ms) VALUES (?1, ?2, ?3, ?4)")
         .bind(&id)
         .bind(&message.kind)
         .bind(&message.text)
         .bind(now_ms)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-    if let Some(ref att) = message.attachment {
+    let attachment_out = if let Some(ref att) = message.attachment {
         let att_id = uuid::Uuid::now_v7().to_string();
-        let att_id_clone = att_id.clone();
         sqlx::query(
             r#"
             INSERT INTO attachments (id, message_id, original_name, mime_type, size_bytes, sha256, storage_name, created_at_ms)
@@ -133,33 +139,44 @@ pub async fn insert_message(pool: &SqlitePool, message: &NewMessage) -> Result<M
         .bind(&att.sha256)
         .bind(&att.storage_name)
         .bind(now_ms)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-        Ok(Message {
-            id,
-            kind: message.kind.clone(),
-            text: message.text.clone(),
-            created_at,
-            attachment: Some(Attachment {
-                id: att_id,
-                filename: att.original_name.clone(),
-                mime_type: att.mime_type.clone(),
-                size: att.size_bytes,
-                sha256: att.sha256.clone(),
-                content_url: format!("/api/v1/files/{att_id_clone}/content"),
-                download_url: format!("/api/v1/files/{att_id_clone}/download"),
-            }),
+        sqlx::query("INSERT INTO messages_fts (message_id, text, filename) VALUES (?1, ?2, ?3)")
+            .bind(&id)
+            .bind(message.text.clone().unwrap_or_default())
+            .bind(&att.original_name)
+            .execute(&mut *tx)
+            .await?;
+
+        Some(Attachment {
+            content_url: format!("/api/v1/files/{att_id}/content"),
+            download_url: format!("/api/v1/files/{att_id}/download"),
+            id: att_id,
+            filename: att.original_name.clone(),
+            mime_type: att.mime_type.clone(),
+            size: att.size_bytes,
+            sha256: att.sha256.clone(),
         })
     } else {
-        Ok(Message {
-            id,
-            kind: message.kind.clone(),
-            text: message.text.clone(),
-            created_at,
-            attachment: None,
-        })
-    }
+        sqlx::query("INSERT INTO messages_fts (message_id, text, filename) VALUES (?1, ?2, ?3)")
+            .bind(&id)
+            .bind(message.text.clone().unwrap_or_default())
+            .bind("")
+            .execute(&mut *tx)
+            .await?;
+        None
+    };
+
+    tx.commit().await?;
+
+    Ok(Message {
+        id,
+        kind: message.kind.clone(),
+        text: message.text.clone(),
+        created_at,
+        attachment: attachment_out,
+    })
 }
 
 pub async fn get_message(pool: &SqlitePool, id: &str) -> Result<Option<Message>, AppError> {
@@ -182,27 +199,147 @@ pub async fn get_message(pool: &SqlitePool, id: &str) -> Result<Option<Message>,
     Ok(grouped.into_values().next())
 }
 
-pub async fn delete_message(pool: &SqlitePool, id: &str) -> Result<(), AppError> {
-    // Get attachment info before deleting
+// Deletes the message (+ attachment row via cascade) and its FTS entry.
+// Returns the storage name of the deleted attachment so the caller can
+// clean up the physical file.
+pub async fn delete_message(pool: &SqlitePool, id: &str) -> Result<Option<String>, AppError> {
+    let mut tx = pool.begin().await?;
+
     let attachment = sqlx::query_as::<_, AttachmentRow>(
         "SELECT id, storage_name FROM attachments WHERE message_id = ?1",
     )
     .bind(id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
 
-    // Delete message (cascade deletes attachment)
     sqlx::query("DELETE FROM messages WHERE id = ?1")
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-    // Return the storage name so the caller can clean up the file
-    if let Some(att) = attachment {
-        tracing::info!("Orphaned file: {}", att.storage_name);
-    }
+    sqlx::query("DELETE FROM messages_fts WHERE message_id = ?1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
 
-    Ok(())
+    tx.commit().await?;
+
+    Ok(attachment.map(|a| a.storage_name))
+}
+
+#[derive(Debug, Serialize)]
+pub struct MessageContextResponse {
+    /// Messages ordered old → new, target message included.
+    pub messages: Vec<Message>,
+    /// Cursor for loading older messages, if any exist below the window.
+    #[serde(rename = "nextCursor")]
+    pub next_cursor: Option<String>,
+}
+
+// Returns up to `limit` messages centered on `id`, preserving real time
+// order (old → new). Used by the frontend to jump to a search result
+// without breaking chronological ordering.
+pub async fn get_message_context(
+    pool: &SqlitePool,
+    id: &str,
+    limit: i64,
+) -> Result<Option<MessageContextResponse>, AppError> {
+    let limit = limit.clamp(1, 100);
+    let target = sqlx::query_scalar::<_, i64>("SELECT created_at_ms FROM messages WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+
+    let Some(target_ms) = target else {
+        return Ok(None);
+    };
+
+    let half = (limit / 2).max(1);
+
+    // Total order is (created_at_ms, id): UUIDv7 ties at the same
+    // millisecond are resolved by the monotonic id, so messages created
+    // in the same millisecond are never missed or reordered.
+    let newer = sqlx::query_as::<_, MessageRow>(
+        r#"
+        SELECT m.id, m.kind, m.text, m.created_at_ms,
+               a.id as a_id, a.original_name as a_filename, a.mime_type as a_mime_type,
+               a.size_bytes as a_size, a.sha256 as a_sha256, a.storage_name as a_storage_name,
+               a.created_at_ms as a_created_at_ms
+        FROM messages m
+        LEFT JOIN attachments a ON a.message_id = m.id
+        WHERE m.created_at_ms > ?1
+           OR (m.created_at_ms = ?1 AND m.id > ?2)
+        ORDER BY m.created_at_ms ASC, m.id ASC
+        LIMIT ?3
+        "#,
+    )
+    .bind(target_ms)
+    .bind(id)
+    .bind(half)
+    .fetch_all(pool)
+    .await?;
+
+    let older_limit = (limit - newer.len() as i64).max(1);
+    let mut rows = sqlx::query_as::<_, MessageRow>(
+        r#"
+        SELECT m.id, m.kind, m.text, m.created_at_ms,
+               a.id as a_id, a.original_name as a_filename, a.mime_type as a_mime_type,
+               a.size_bytes as a_size, a.sha256 as a_sha256, a.storage_name as a_storage_name,
+               a.created_at_ms as a_created_at_ms
+        FROM messages m
+        LEFT JOIN attachments a ON a.message_id = m.id
+        WHERE m.created_at_ms < ?1
+           OR (m.created_at_ms = ?1 AND m.id <= ?2)
+        ORDER BY m.created_at_ms DESC, m.id DESC
+        LIMIT ?3
+        "#,
+    )
+    .bind(target_ms)
+    .bind(id)
+    .bind(older_limit)
+    .fetch_all(pool)
+    .await?;
+
+    // Merge the newer half into the window before ordering.
+    rows.extend(newer);
+
+    // rows is currently newest→oldest; reorder old→new before grouping.
+    rows.sort_by(|a, b| a.created_at_ms.cmp(&b.created_at_ms).then(a.id.cmp(&b.id)));
+
+    let oldest = rows.first();
+    let has_older = if let Some(oldest) = oldest {
+        sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT EXISTS(
+                SELECT 1 FROM messages
+                WHERE created_at_ms < ?1
+                   OR (created_at_ms = ?1 AND id < ?2)
+            )
+            "#,
+        )
+        .bind(oldest.created_at_ms)
+        .bind(&oldest.id)
+        .fetch_one(pool)
+        .await?
+            == 1
+    } else {
+        false
+    };
+
+    let next_cursor = if has_older {
+        oldest.map(|r| r.id.clone())
+    } else {
+        None
+    };
+
+    let grouped = group_messages(&rows);
+    let mut messages: Vec<Message> = grouped.into_values().collect();
+    messages.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
+
+    Ok(Some(MessageContextResponse {
+        messages,
+        next_cursor,
+    }))
 }
 
 #[derive(Debug, sqlx::FromRow)]

@@ -34,10 +34,9 @@ pub struct AttachmentInfo {
     pub message_created_at_ms: i64,
 }
 
-pub async fn get_orphan_files(pool: &SqlitePool) -> Result<Vec<String>, AppError> {
-    // Get all storage names from attachments
-    let names = sqlx::query_scalar::<_, String>("SELECT storage_name FROM attachments")
+pub async fn list_storage_names(pool: &SqlitePool) -> Result<Vec<String>, AppError> {
+    sqlx::query_scalar::<_, String>("SELECT storage_name FROM attachments")
         .fetch_all(pool)
-        .await?;
-    Ok(names)
+        .await
+        .map_err(|e| e.into())
 }

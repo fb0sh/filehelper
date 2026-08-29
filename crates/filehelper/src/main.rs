@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState::new(pool.clone(), app_config);
 
     // Startup cleanup
-    files::gc::cleanup_tmp(&state).await;
+    files::gc::startup_cleanup(&state).await;
 
     let router = routes::build_router(state.clone());
 

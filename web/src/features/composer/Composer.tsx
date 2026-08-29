@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { messagesApi } from '../../api';
+import { messagesApi, messageKeys } from '../../api';
 import { useUploadStore } from '../../stores/upload';
 import { Paperclip, Send } from 'lucide-react';
 import styles from './Composer.module.scss';
@@ -15,7 +15,8 @@ export function Composer() {
   const sendMutation = useMutation({
     mutationFn: (text: string) => messagesApi.create(text),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
+      queryClient.invalidateQueries({ queryKey: messageKeys.latest });
     },
   });
 

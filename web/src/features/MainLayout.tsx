@@ -1,66 +1,108 @@
+import { Sidebar } from './sidebar/Sidebar';
 import { Chat } from './chat/Chat';
+import { SearchPanel } from './search/SearchPanel';
+import { useUIStore } from '../stores/ui';
 import { useRealtimeStore } from '../stores/realtime';
+import { useSearchStore } from '../stores/search';
 import { useEffect } from 'react';
+import { InfiniteData, useQueryClient } from '@tanstack/react-query';
 import { createWebSocket } from '../lib/websocket';
-import { useQueryClient } from '@tanstack/react-query';
-import { Message } from '../api';
+import {
+  MessageListResponse,
+  RealtimeEvent,
+  messageKeys,
+} from '../api';
+import { prependMessageDedupe, removeMessageFromPages } from '../lib/realtimeCache';
 import { useGlobalDragDrop } from '../hooks/useGlobalDragDrop';
 import { useGlobalPaste } from '../hooks/useGlobalPaste';
 import { useUploadManager } from '../hooks/useUploadManager';
-import { Paperclip } from 'lucide-react';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { FileText } from 'lucide-react';
 import styles from './MainLayout.module.scss';
 
 export function MainLayout() {
   const { setStatus } = useRealtimeStore();
+  const mobileChatOpen = useUIStore((s) => s.mobileChatOpen);
+  const searchOpen = useSearchStore((s) => s.open);
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
 
   const dragOver = useGlobalDragDrop();
   useGlobalPaste();
   useUploadManager();
 
   useEffect(() => {
-    const cleanup = createWebSocket((event) => {
-      setStatus('connected');
-      if (event.type === 'message.created' && event.message) {
-        queryClient.setQueryData(['messages'], (old: any) => {
-          if (!old?.pages || old.pages.length === 0) return old;
-          const pages = [...old.pages];
-          const firstPage = { ...pages[0], messages: [event.message, ...(pages[0]?.messages || [])] };
-          pages[0] = firstPage;
-          return { ...old, pages };
-        });
-      } else if (event.type === 'message.deleted' && event.messageId) {
-        queryClient.setQueryData(['messages'], (old: any) => {
-          if (!old?.pages) return old;
-          const pages = old.pages.map((page: any) => ({
-            ...page,
-            messages: page.messages.filter((m: Message) => m.id !== event.messageId),
-          }));
-          return { ...old, pages };
-        });
-      }
+    const cleanup = createWebSocket({
+      onStatus: (status) => {
+        setStatus(status);
+        if (status === 'connected') {
+          // Reconnected: refetch to backfill anything missed offline.
+          queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
+          queryClient.invalidateQueries({ queryKey: messageKeys.latest });
+        }
+      },
+      onEvent: (event) => {
+        const e = event as RealtimeEvent;
+        if (e.type === 'message.created' && e.message) {
+          queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+            messageKeys.infinite,
+            (old) => prependMessageDedupe(old, e.message!)
+          );
+          queryClient.invalidateQueries({ queryKey: messageKeys.latest });
+        } else if (e.type === 'message.deleted' && e.messageId) {
+          queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+            messageKeys.infinite,
+            (old) => removeMessageFromPages(old, e.messageId!)
+          );
+          queryClient.invalidateQueries({ queryKey: messageKeys.latest });
+        }
+      },
     });
 
     return cleanup;
   }, [queryClient, setStatus]);
 
+  const searchPanel = searchOpen ? <SearchPanel /> : null;
+
+  if (isMobile) {
+    return (
+      <>
+        {dragOver && <DropOverlay />}
+        <div className={styles.mobileLayout}>
+          <div className={`${styles.mobilePanel} ${mobileChatOpen ? styles.hidden : ''}`}>
+            <Sidebar />
+          </div>
+          <div className={`${styles.mobilePanel} ${!mobileChatOpen ? styles.hidden : ''}`}>
+            <Chat />
+          </div>
+          {searchPanel}
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      {dragOver && (
-        <div className={styles.dropOverlay}>
-          <div className={styles.dropContent}>
-            <div className={styles.dropIcon}>
-              <Paperclip size={48} />
-            </div>
-            <div className={styles.dropTitle}>Drop files here</div>
-            <div className={styles.dropSubtitle}>to send them to FileHelper</div>
-          </div>
-        </div>
-      )}
-
+      {dragOver && <DropOverlay />}
       <div className={styles.layout}>
+        <Sidebar />
         <Chat />
+        {searchPanel}
       </div>
     </>
+  );
+}
+
+function DropOverlay() {
+  return (
+    <div className={styles.dropOverlay}>
+      <div className={styles.dropContent}>
+        <div className={styles.dropIcon}>
+          <FileText size={48} />
+        </div>
+        <div className={styles.dropTitle}>Drop files here</div>
+        <div className={styles.dropSubtitle}>to send them to FileHelper</div>
+      </div>
+    </div>
   );
 }

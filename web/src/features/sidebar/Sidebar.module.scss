@@ -168,3 +168,14 @@
     background: var(--menu-hover);
   }
 }
+
+.menuCheck {
+  margin-left: auto;
+  color: var(--primary-color);
+}
+
+.menuDivider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-color);
+}

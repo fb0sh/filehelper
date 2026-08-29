@@ -1,4 +1,4 @@
-import { request, API_BASE } from './client';
+import { API_BASE } from './client';
 import { Message } from './messages';
 
 export interface UploadOptions {

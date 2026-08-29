@@ -1,6 +1,6 @@
 import { useState, MouseEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Message, messagesApi } from '../../../api';
+import { Message, messagesApi, messageKeys } from '../../../api';
 import { TextMessage } from './TextMessage';
 import { FileMessage } from './FileMessage';
 import { ImageMessage } from './ImageMessage';
@@ -20,7 +20,8 @@ export function MessageBubble({ message }: Props) {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => messagesApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
+      queryClient.invalidateQueries({ queryKey: messageKeys.latest });
     },
   });
 

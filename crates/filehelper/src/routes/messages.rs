@@ -52,11 +52,49 @@ pub async fn create(
     Ok(Json(message))
 }
 
+#[derive(Deserialize)]
+pub struct ContextQuery {
+    pub limit: Option<i64>,
+}
+
+pub async fn context(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<ContextQuery>,
+) -> Result<Json<db::MessageContextResponse>, AppError> {
+    let ctx = db::get_message_context(&state.db, &id, query.limit.unwrap_or(50))
+        .await?
+        .ok_or(AppError::MessageNotFound)?;
+    Ok(Json(ctx))
+}
+
 pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, AppError> {
-    db::delete_message(&state.db, &id).await?;
+    let storage_name = db::delete_message(&state.db, &id).await?;
+
+    // Clean up the physical file: atomic rename to trash first, then
+    // unlink from trash in the background. If anything fails, startup
+    // GC sweeps it later.
+    if let Some(name) = storage_name {
+        let files_dir = state.config.files_dir.clone();
+        let trash_dir = state.config.trash_dir.clone();
+        match crate::files::storage::move_to_trash(&files_dir, &trash_dir, &name).await {
+            Ok(_) => {
+                tokio::spawn(async move {
+                    if let Err(e) = tokio::fs::remove_file(trash_dir.join(&name)).await {
+                        tracing::warn!("Failed to unlink trashed file {name}: {e}");
+                    }
+                });
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to move deleted file {name} to trash: {e}; startup GC will retry"
+                );
+            }
+        }
+    }
 
     let _ = state.broadcast.send(crate::state::BroadcastEvent {
         event_type: "message.deleted".to_string(),

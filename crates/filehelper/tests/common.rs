@@ -52,6 +52,20 @@ pub fn cleanup(dir: &PathBuf) {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// Shared test helpers — not every test binary uses every helper.
+#[allow(dead_code)]
 pub fn make_session_cookie(state: &AppState) -> String {
     filehelper::auth::session::create_session_cookie(state).unwrap()
+}
+
+// "filehelper_session=<token>" value for the Cookie request header.
+#[allow(dead_code)]
+pub fn session_cookie_header(state: &AppState) -> String {
+    let cookie = make_session_cookie(state);
+    cookie.split(';').next().unwrap_or("").to_string()
+}
+
+#[allow(dead_code)]
+pub fn test_router(state: AppState) -> axum::Router {
+    filehelper::routes::build_router(state)
 }

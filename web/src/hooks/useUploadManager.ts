@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useUploadStore } from '../stores/upload';
-import { uploadFile } from '../api';
+import { uploadFile, messageKeys } from '../api';
 import { useQueryClient } from '@tanstack/react-query';
 import { setUploadProcessFn } from '../stores/upload';
 
@@ -15,6 +15,7 @@ export function useUploadManager() {
     });
 
     return () => setUploadProcessFn(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const processNext = async () => {
@@ -66,7 +67,8 @@ export function useUploadManager() {
             progress: 100,
             messageId: message.id,
           });
-          queryClient.invalidateQueries({ queryKey: ['messages'] });
+          queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
+      queryClient.invalidateQueries({ queryKey: messageKeys.latest });
         })
         .catch((err) => {
           useUploadStore.getState().updateTask(task.id, {

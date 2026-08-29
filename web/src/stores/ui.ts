@@ -4,13 +4,8 @@ type Theme = 'system' | 'light' | 'dark';
 
 interface UIState {
   theme: Theme;
-  sidebarOpen: boolean;
-  searchOpen: boolean;
   mobileChatOpen: boolean;
   setTheme: (theme: Theme) => void;
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
-  setSearchOpen: (open: boolean) => void;
   setMobileChatOpen: (open: boolean) => void;
 }
 
@@ -32,17 +27,12 @@ function applyTheme(theme: Theme) {
 
 export const useUIStore = create<UIState>((set) => ({
   theme: getStoredTheme(),
-  sidebarOpen: true,
-  searchOpen: false,
   mobileChatOpen: false,
   setTheme: (theme) => {
     localStorage.setItem('filehelper.theme', theme);
     applyTheme(theme);
     set({ theme });
   },
-  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  setSearchOpen: (open) => set({ searchOpen: open }),
   setMobileChatOpen: (open) => set({ mobileChatOpen: open }),
 }));
 

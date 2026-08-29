@@ -103,12 +103,12 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   // Internal: process the upload queue
   processQueue: () => {
     // This is set from outside by the upload manager hook
-    const processFn = (useUploadStore as any).__processFn;
+    const processFn = (useUploadStore as unknown as { __processFn?: () => void }).__processFn;
     if (processFn) processFn();
   },
 }));
 
 // Set the process function
 export function setUploadProcessFn(fn: () => void) {
-  (useUploadStore as any).__processFn = fn;
+  (useUploadStore as unknown as { __processFn?: () => void }).__processFn = fn;
 }

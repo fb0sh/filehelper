@@ -17,15 +17,17 @@ export const useAuthStore = create<AuthState>((set) => ({
       await authApi.login({ password });
       set({ isAuthenticated: true, loginError: null });
       return true;
-    } catch (e: any) {
-      set({ loginError: e.message || 'Invalid password' });
+    } catch (e) {
+      set({ loginError: e instanceof Error ? e.message : 'Invalid password' });
       return false;
     }
   },
   logout: async () => {
     try {
       await authApi.logout();
-    } catch {}
+    } catch {
+      // ignore network errors on logout
+    }
     set({ isAuthenticated: false });
   },
   checkSession: async () => {

@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { messagesApi, Message } from '../../api';
+import { messagesApi, Message, messageKeys } from '../../api';
 import { useUploadStore } from '../../stores/upload';
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { MessageBubble } from './messages/MessageBubble';
@@ -7,6 +7,8 @@ import { UploadMessage } from './messages/UploadMessage';
 import { DateSeparator } from './DateSeparator';
 import { ScrollToBottom } from './ScrollToBottom';
 import { formatDateSeparator } from '../../lib/dates';
+import { isNearBottom, shouldLoadMore } from '../../lib/scroll';
+import { contextToInfiniteData } from '../../lib/realtimeCache';
 import styles from './MessageList.module.scss';
 
 export interface MessageListHandle {
@@ -38,20 +40,20 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ['messages'],
+    queryKey: messageKeys.infinite,
     queryFn: ({ pageParam }) => messagesApi.list(pageParam, 50),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
   });
 
   const allMessages = data?.pages.flatMap((p) => p.messages) ?? [];
+  // Cache is newest-first; render old → new.
   const messages = [...allMessages].reverse();
 
   useEffect(() => {
     if (containerRef.current && !isLoadingMore.current) {
       const container = containerRef.current;
-      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-      if (isNearBottom) {
+      if (isNearBottom(container, 100)) {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       }
     }
@@ -59,47 +61,47 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
 
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
-    if (!container || !hasNextPage || isFetchingNextPage) return;
+    if (!container) return;
 
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
-    setShowScrollBtn(!isNearBottom);
+    // Scroll button state must be updated on every scroll, independent
+    // of pagination.
+    setShowScrollBtn(!isNearBottom(container, 200));
 
-    if (container.scrollTop < 50) {
-      isLoadingMore.current = true;
-      prevScrollHeight.current = container.scrollHeight;
-      fetchNextPage().then(() => {
-        requestAnimationFrame(() => {
-          if (containerRef.current) {
-            const newScrollHeight = containerRef.current.scrollHeight;
-            containerRef.current.scrollTop = newScrollHeight - prevScrollHeight.current;
-          }
-          isLoadingMore.current = false;
-        });
+    if (!shouldLoadMore(container.scrollTop, hasNextPage, isFetchingNextPage)) return;
+
+    isLoadingMore.current = true;
+    prevScrollHeight.current = container.scrollHeight;
+    fetchNextPage().then(() => {
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          const newScrollHeight = containerRef.current.scrollHeight;
+          containerRef.current.scrollTop = newScrollHeight - prevScrollHeight.current;
+        }
+        isLoadingMore.current = false;
       });
-    }
+    });
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   useImperativeHandle(ref, () => ({
     jumpToMessage: async (msg: Message) => {
-      // If message is already in the list, scroll to it
       const exists = messages.some((m) => m.id === msg.id);
       if (!exists) {
-        // Insert it into the first page of the cache
-        queryClient.setQueryData(['messages'], (old: any) => {
-          if (!old?.pages || old.pages.length === 0) return old;
-          const pages = [...old.pages];
-          const firstPage = { ...pages[0], messages: [msg, ...(pages[0]?.messages || [])] };
-          pages[0] = firstPage;
-          return { ...old, pages };
-        });
-        // Wait for re-render
-        await new Promise((r) => setTimeout(r, 100));
+        // Load the real context window around the target so time order
+        // stays intact — never splice a lone message into the cache.
+        try {
+          const ctx = await messagesApi.context(msg.id, 50);
+          queryClient.setQueryData(
+            messageKeys.infinite,
+            contextToInfiniteData(ctx.messages, ctx.nextCursor)
+          );
+          // Allow a frame for the list to render.
+          await new Promise((r) => setTimeout(r, 80));
+        } catch {
+          return;
+        }
       }
-      // Find the DOM element and scroll to it
       const el = containerRef.current?.querySelector(`[data-message-id="${msg.id}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightId(msg.id);
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
       highlightTimer.current = setTimeout(() => setHighlightId(null), 2000);
@@ -107,11 +109,6 @@ export const MessageList = forwardRef<MessageListHandle>((_props, ref) => {
   }));
 
   const grouped = groupByDate(messages);
-  const isNearBottom = useCallback(() => {
-    const c = containerRef.current;
-    if (!c) return true;
-    return c.scrollHeight - c.scrollTop - c.clientHeight < 200;
-  }, []);
 
   if (isLoading) {
     return <div className={styles.loading}>Loading messages...</div>;

@@ -65,7 +65,7 @@ describe('useUploadStore', () => {
       new File([''], 'a.txt'),
       new File([''], 'b.txt'),
     ]);
-    const [id1, id2] = useUploadStore.getState().tasks.map((t) => t.id);
+    const [id1] = useUploadStore.getState().tasks.map((t) => t.id);
     useUploadStore.getState().updateTask(id1, { status: 'uploading' });
     expect(useUploadStore.getState().getActiveCount()).toBe(2);
     expect(useUploadStore.getState().getUploadingCount()).toBe(1);
@@ -76,7 +76,7 @@ describe('useUploadStore', () => {
       new File([''], 'a.txt'),
       new File([''], 'b.txt'),
     ]);
-    const [id1, id2] = useUploadStore.getState().tasks.map((t) => t.id);
+    const [id1] = useUploadStore.getState().tasks.map((t) => t.id);
     useUploadStore.getState().updateTask(id1, { status: 'uploading' });
     useUploadStore.getState().cancelAll();
     expect(useUploadStore.getState().tasks.every((t) => t.status === 'cancelled')).toBe(true);

@@ -21,6 +21,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/session", get(auth::session))
         .route("/messages", get(messages::list).post(messages::create))
+        .route("/messages/{id}/context", get(messages::context))
         .route(
             "/messages/{id}",
             get(messages::get).delete(messages::delete),
