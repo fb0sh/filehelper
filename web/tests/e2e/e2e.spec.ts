@@ -216,6 +216,40 @@ test.describe('FileHelper v2.0 E2E', () => {
     await server.stop();
   });
 
+  test('clear all data: UI empties in the clearing tab AND other tabs (realtime)', async ({ browser }) => {
+    const server = await startServer();
+    const base = `http://127.0.0.1:${server.port}`;
+    const code = uniqueCode('clearboth');
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    const pageA = await ctxA.newPage();
+    const pageB = await ctxB.newPage();
+    await login(pageA, base, code);
+    await login(pageB, base, code);
+    await sendText(pageA, 'to-be-cleared');
+    await expect(pageB.locator('text=to-be-cleared').first()).toBeVisible({ timeout: 10000 });
+
+    // Tab A clears everything via Settings → Storage.
+    await pageA.click('button[aria-label="Open menu"]');
+    await pageA.locator('div[class*="menu"] button', { hasText: 'Storage' }).click();
+    await pageA.locator('button', { hasText: 'Clear All Data' }).click();
+    await pageA.getByRole('button', { name: 'Clear', exact: true }).click();
+
+    // Tab A empties immediately: no messages, group count drops to zero
+    // (badge hidden → tab reads "All", not "All1").
+    await expect(pageA.locator('div[data-message-id]')).toHaveCount(0, { timeout: 10000 });
+    expect(await pageA.locator('[role="tab"]').first().textContent()).toBe('All');
+    expect(await pageA.locator('div[class*="chatPreview"]').first().textContent()).toBe('');
+
+    // Tab B empties via the space.cleared realtime broadcast.
+    await expect(pageB.locator('div[data-message-id]')).toHaveCount(0, { timeout: 10000 });
+    expect(await pageB.locator('[role="tab"]').first().textContent()).toBe('All');
+
+    await ctxA.close();
+    await ctxB.close();
+    await server.stop();
+  });
+
   test('upload works without crypto.randomUUID (LAN HTTP has no secure context)', async ({ page }) => {
     const server = await startServer();
     const base = `http://127.0.0.1:${server.port}`;

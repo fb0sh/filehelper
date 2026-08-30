@@ -50,10 +50,14 @@ export function Sidebar() {
 
   const trimmed = searchQuery.trim().toLowerCase();
   const chatVisible = trimmed === '' || 'filehelper'.includes(trimmed);
+  // The space has content only when the latest-message query returns
+  // something; after Clear All Data it is empty, so the group counts
+  // must drop to zero (and the badge hide) instead of staying "1".
+  const hasMessages = (data?.messages?.length ?? 0) > 0;
   // Telegram-style filter chips: All / Personal / Unread. The single chat
   // is a personal space, so Personal matches All; Unread stays empty (no
   // unread tracking exists) and shows the empty state honestly.
-  const chatCount = chatVisible ? 1 : 0;
+  const chatCount = chatVisible && hasMessages ? 1 : 0;
   const showChat = chatVisible && filter !== 'unread';
   const chips: { key: 'all' | 'personal' | 'unread'; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: chatCount },
@@ -64,7 +68,7 @@ export function Sidebar() {
   const preview =
     lastDecrypted?.text ??
     lastDecrypted?.attachment?.filename ??
-    'end-to-end encrypted';
+    (hasMessages ? 'end-to-end encrypted' : '');
 
   return (
     <div className={styles.sidebar} data-tg="sidebar">

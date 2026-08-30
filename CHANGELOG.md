@@ -3,6 +3,21 @@
 All notable changes to FileHelper are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## 2.0.6 — 2026-08-30
+
+### Fixes
+
+- **Clear All Data now updates every open tab immediately.** The clear
+  endpoint broadcasts a `space.cleared` realtime event, so all connected
+  tabs/devices empty their message list, caches, and previews at once —
+  not just the tab that clicked.
+- **Sidebar group counts reflect reality.** The All / Personal badges
+  were hardcoded to `1` as long as a chat existed; after clearing they
+  still showed "1". The count now derives from the actual message query,
+  so an empty space shows no badge. The row preview also shows nothing
+  instead of the misleading "end-to-end encrypted" placeholder when the
+  space is empty.
+
 ## 2.0.5 — 2026-08-30
 
 ### Features

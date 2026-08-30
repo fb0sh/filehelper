@@ -25,7 +25,7 @@ export interface MessageContextResponse {
 }
 
 export interface RealtimeEvent {
-  type: 'message.created' | 'message.deleted' | 'messages.deleted';
+  type: 'message.created' | 'message.deleted' | 'messages.deleted' | 'space.cleared';
   message?: EncryptedMessage;
   messageId?: string;
   messageIds?: string[];

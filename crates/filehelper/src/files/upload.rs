@@ -282,3 +282,10 @@ pub fn publish_messages_deleted(state: &AppState, space_id: &str, message_ids: &
     });
     state.spaces.publish(space_id, event);
 }
+
+/// Broadcast that the whole space was wiped (Settings → Clear All Data),
+/// so every connected tab/device empties its UI immediately.
+pub fn publish_space_cleared(state: &AppState, space_id: &str) {
+    let event = serde_json::json!({ "type": "space.cleared" });
+    state.spaces.publish(space_id, event);
+}

@@ -71,6 +71,17 @@ export function MainLayout() {
             (old) => removeMessagesFromPages(old, e.messageIds!)
           );
           queryClient.invalidateQueries({ queryKey: messageKeys.latest });
+        } else if (e.type === 'space.cleared') {
+          // Another tab/device wiped the space (Settings → Clear All
+          // Data): empty every cache and refetch, like the local clear.
+          decryptedCache.clear();
+          imagePreviewCache.clear();
+          queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+            messageKeys.infinite,
+            { pages: [], pageParams: [] }
+          );
+          queryClient.invalidateQueries({ queryKey: messageKeys.infinite });
+          queryClient.invalidateQueries({ queryKey: messageKeys.latest });
         }
       },
     });

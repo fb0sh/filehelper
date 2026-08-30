@@ -111,6 +111,8 @@ pub async fn clear_all(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let storage_names = db::clear_space(&state.db, &auth.space_id).await?;
     cleanup_files(&state, &storage_names).await;
+    // Every connected tab/device must empty its UI immediately.
+    crate::files::upload::publish_space_cleared(&state, &auth.space_id);
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
